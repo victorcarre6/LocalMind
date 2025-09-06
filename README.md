@@ -6,7 +6,7 @@
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 - **Advanced Memorization**  
   - Automatic saving of conversations in a SQLite database.  
@@ -33,7 +33,7 @@
 
 ---
 
-## 🛠️ Architecture
+## Architecture
 
 - **`scripts/gui.py`**: User interface (chat + settings).  
 - **`scripts/llm_executor.py`**: LLM response generation.  
@@ -47,7 +47,7 @@
 
 ---
 
-## ⚙️ Installation
+## Installation
 
 1. Clone the repository:
 
@@ -83,7 +83,7 @@ python -m spacy download en_core_web_lg
 "model_path": "resources/models/Qwen3-0.6B/Qwen3-0.6B-Q5_K_M.gguf"
 ```
 
-## ▶️ Usage
+## Usage
 Run the GUI:
 ```bash
 python scripts/gui.py
@@ -99,7 +99,7 @@ python scripts/gui.py
 	•	Display of <think> blocks togglable.
 
 
-## 📦 Configuration (config.json)
+## Configuration (config.json)
 
 Minimal example:
 ```json
@@ -139,7 +139,8 @@ Minimal example:
   }
 }
 ```
-## 🧠 Memory Management
+
+## Memory Management
 	•	Recent exchanges are always injected into the prompt.
 	•	Older conversations are retrieved using:
 	•	Keyword filtering (KeyBERT),
@@ -159,21 +160,21 @@ SYSTEM: Answer scientifically...
 <|im_start|>assistant (summary) ...
 ```
 
-## 📊 Performance
+## Performance
 •	Summaries are generated once at insertion → fast prompt generation.
 •	Fast vector search using FAISS.
 •	Ability to limit the number of contexts (context_count) and recent exchanges (max 3 by default).
 
-## 🔮 Roadmap
+## Roadmap
 •	Optional integration with sqlite-vec for semantic search.
 •	Improved reranking of contexts.
 •	Support for additional LLM backends (vLLM, Ollama, LM Studio).
 •	Interactive dashboard for conversation visualization.
 
 
-## 🤝 Contribution
+## Contribution
 
-easy-llama
+- [easy-llama](https://github.com/ddh0/easy-llama)
 Contributions are welcome: issues, pull requests, suggestions.
 
 ## 📜 License
