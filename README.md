@@ -117,7 +117,7 @@ Minimal example:
     "stopwords_file_path": "resources/stopwords_fr.json"
   },
   "models": {
-    "summarizing_model": "plguillou/t5-base-fr-sum-cnndm",
+    "summarizing_model": "Falconsai/text_summarization",
     "llm": {
       "model_path": "resources/models/Qwen3-0.6B/Qwen3-0.6B-Q5_K_M.gguf",
       "sampler_params": {
@@ -141,15 +141,13 @@ Minimal example:
 ```
 
 ## Memory Management
-	•	Recent exchanges are always injected into the prompt.
-	•	Older conversations are retrieved using:
-	•	Keyword filtering (KeyBERT),
-	•	FAISS vector search,
-	•	Summaries stored in the database (llm_output_summary).
-	•	Example prompt structure:
+•	Recent exchanges are always injected into the prompt.
+•	Older conversations are retrieved using:
+•	Keyword filtering (KeyBERT),
+•	FAISS vector search,
+•	Summaries stored in the database (llm_output_summary).
 
-
-
+Example prompt structure:
 ```bash
 SYSTEM: Answer scientifically...
 ### RECENT EXCHANGES ###
