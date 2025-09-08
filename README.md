@@ -37,7 +37,7 @@
 
 - **`scripts/gui.py`**: User interface (chat + settings).  
 - **`scripts/llm_executor.py`**: LLM response generation.  
-- **`scripts/memorization.py`**: Memory management, summarization, database insertion.  
+- **`scripts/main.py`**: Memory management, summarization, database insertion.  
 - **`datas/conversations.db`**: SQLite database containing:
   - `conversations` (inputs, outputs, summaries, timestamps, model info).  
   - `vectors` (keywords and embeddings).  

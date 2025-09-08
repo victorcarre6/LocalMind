@@ -7,7 +7,7 @@ from easy_llama import SamplerParams
 from langdetect import detect
 import re
 
-from memorization import insert_conversation_if_new, init_db_connection
+from main import insert_conversation_if_new, init_db_connection
 
 # === CONFIG & INITIALISATION ===
 
@@ -67,10 +67,11 @@ def add_no_think(prompt: str) -> str:
 def generate_response(user_input: str, input_text: str, enable_thinking: bool, show_thinking: bool) -> str:
     if not enable_thinking and "/no_think" not in input_text:
         input_text = add_no_think(input_text)
+    start_generate = time.time()
     input_tokens = llm.tokenize(input_text.encode('utf-8'), add_special=True, parse_special=True)
     output_tokens = llm.generate(
         input_tokens,
-        n_predict=20000, #à remplacer par max_new_tokens
+        n_predict=20000,
         sampler_preset=sampler_params,
         stop_tokens=stop_tokens
     )
@@ -79,11 +80,14 @@ def generate_response(user_input: str, input_text: str, enable_thinking: bool, s
     raw_response = llm.detokenize(output_tokens, special=True).strip()
     formatted_response = text_formatting(raw_response)
     clean_response = remove_think_blocks(formatted_response)
-
+    end_generate = time.time()
+    print(f"[TIMER] Durée de génération de la réponse : {end_generate - start_generate:.1f} s")
     # Insert directement dans la base SQL
+    start_sync = time.time()
     init_db_connection(db_path)
     insert_conversation_if_new(user_input, clean_response, model_path.name)
-    print("--INFO-- Échange ajouté à la base de donnée.")
+    end_sync = time.time()
+    print(f"[TIMER] Échange ajouté à la base de donnée en {end_sync - start_sync:.1f} s.")
     if not show_thinking:
         return clean_response
     else:

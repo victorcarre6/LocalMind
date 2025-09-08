@@ -3,7 +3,7 @@ import sqlite3
 import logging
 import numpy as np
 import faiss
-from memorization import embedding_model, faiss_index, save_faiss_index
+from main import embedding_model, faiss_index, save_faiss_index
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 

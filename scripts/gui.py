@@ -1,3 +1,4 @@
+import threading
 import platform
 import tkinter as tk
 import time
@@ -5,12 +6,111 @@ from tkinter import ttk, scrolledtext
 import webbrowser
 
 from llm_executor import generate_response
-import memorization
-from memorization import on_ask
+import main
+from main import on_ask
 
-# === Fonctions utilitaires ===
+# === Fonctions principale ===
+
+root = tk.Tk()
 
 conversation_counter = 0
+keyword_count_var = tk.IntVar(value=5)
+context_count_var = tk.IntVar(value=3)
+checkbox_thinking = tk.BooleanVar(value=False)
+checkbox_show_thinking = tk.BooleanVar(value=False)
+checkbox_memory_recall = tk.BooleanVar(value=True)
+
+main.set_gui_vars(keyword_count_var, context_count_var)
+
+
+def preload_models_and_update_status():
+    label_status.config(text="Loading models...", foreground="#FFD700")
+    try:
+        main.load_models_in_background()
+        label_status.config(text="Ready", foreground="white")
+    except Exception as e:
+        label_status.config(text=f"Error loading models: {e}", foreground="#ff6b6b")
+
+def on_generate(event=None):
+    global conversation_counter
+
+    start_on_generate = time.time()
+
+    user_input = entry_question.get("1.0", tk.END).strip()
+    history_limit = min(conversation_counter, 3)
+    context_count = context_count_var.get()
+    keyword_count = keyword_count_var.get()
+    memory_recall = checkbox_memory_recall.get()
+
+    if not user_input:
+        update_status("Please enter a question.", error=True)
+        return
+
+    running_prompt = True
+
+    def update_chrono_prompt():
+        nonlocal running_prompt
+        if not running_prompt:
+            return
+        elapsed = time.time() - start_on_generate
+        update_status(f"Processing prompt... ({elapsed:.1f}s)")
+        root.after(100, update_chrono_prompt)
+
+    update_chrono_prompt()
+
+    root.update()
+
+    try:
+        start_on_ask = time.time()
+        final_prompt = on_ask(user_input, context_limit=context_count, keyword_count=keyword_count, recall=memory_recall, history_limit=history_limit)
+        running_prompt = False
+        end_on_ask = time.time()
+
+        print("--INFO-- final_prompt :")
+        print(final_prompt)
+
+        print("==== MÉTRIQUES DE LA CONVERSATION ====")
+        print(f"[TIMER on_generate (on_ask total)] Durée de processing du prompt : {end_on_ask - start_on_ask:.2f} s")
+
+        running_response = True
+
+        def update_chrono_response():
+            nonlocal running_response
+            if not running_response:
+                return
+            elapsed = time.time() - end_on_ask
+            update_status(f"Generating response... ({elapsed:.1f}s)")
+            root.after(100, update_chrono_response)
+
+        update_chrono_response()
+
+        response = generate_response(
+            user_input,
+            final_prompt,
+            enable_thinking=checkbox_thinking.get(),
+            show_thinking=checkbox_show_thinking.get()
+        )
+        end_generate = time.time()
+        running_response = False
+        print(f"[TIMER on_generate] Durée totale de l'échange : {end_generate - start_on_generate:.2f} s")
+        conversation_counter += 1
+        print(f"--INFO-- conversation_counter: {conversation_counter}")
+        # Insert user message in chat history
+        chat_history.config(state=tk.NORMAL)
+        chat_history.insert(tk.END, "You: " + user_input + "\n", "user")
+        chat_history.insert(tk.END, "Assistant: " + response + "\n\n", "assistant")
+        chat_history.config(state=tk.DISABLED)
+
+        entry_question.delete("1.0", tk.END)
+        update_status(f"Response generated successfully ({end_generate - start_on_generate:.1f} s).", success=True)
+        
+    except Exception as e:
+        running_prompt = False
+        update_status(f"Error: {e}", error=True)
+
+
+
+# === Fonctions d'affichage ===
 
 def update_status(message, error=False, success=False):
     label_status.config(text=message)
@@ -23,7 +123,6 @@ def update_status(message, error=False, success=False):
 
 def open_github(event):
     webbrowser.open_new("https://github.com/victorcarre6")
-
 
 def show_help():
     help_window = tk.Toplevel(root)
@@ -76,67 +175,6 @@ def bring_to_front():
     root.lift()
     root.attributes('-topmost', True)
     root.after(200, lambda: root.attributes('-topmost', False))
-
-def on_generate(event=None):
-    global conversation_counter
-    start_on_generate = time.time()
-    user_input = entry_question.get("1.0", tk.END).strip()
-    history_limit = min(conversation_counter, 3)
-    context_count = context_count_var.get()
-    keyword_count = keyword_count_var.get()
-    memory_recall = checkbox_memory_recall.get()
-    if not user_input:
-        update_status("Please enter a question.", error=True)
-        return
-    update_status("Generating response...")
-
-    root.update()
-
-    try:
-
-        start_on_ask = time.time()
-        final_prompt = on_ask(user_input, context_limit=context_count, keyword_count=keyword_count, recall=memory_recall, history_limit=history_limit)
-        end_on_ask = time.time()
-
-        print("final_prompt :")
-        print(final_prompt)
-        print("")
-        print(f"Durée de processing du prompt : {end_on_ask - start_on_ask:.2f} s")
-
-        start_generate = time.time()
-        response = generate_response(
-            user_input,
-            final_prompt,
-            enable_thinking=checkbox_thinking.get(),
-            show_thinking=checkbox_show_thinking.get()
-        )
-        end_generate = time.time()
-        print(f"Durée de génération de la réponse : {end_generate - start_generate:.2f} s")
-        print(f"Durée totale de l'échange : {end_generate - start_on_generate:.2f} s")
-        conversation_counter += 1
-        print(f"conversation_counter: {conversation_counter}")
-        # Insert user message in chat history
-        chat_history.config(state=tk.NORMAL)
-        chat_history.insert(tk.END, "You: " + user_input + "\n", "user")
-        chat_history.insert(tk.END, "Assistant: " + response + "\n\n", "assistant")
-        chat_history.config(state=tk.DISABLED)
-        chat_history.see(tk.END)
-
-        entry_question.delete("1.0", tk.END)
-        update_status("Response generated successfully.", success=True)
-        
-    except Exception as e:
-        update_status(f"Error: {e}", error=True)
-
-
-# === CONFIGURATION DE L'INTERFACE ===
-root = tk.Tk()
-
-keyword_count_var = tk.IntVar(value=5)
-context_count_var = tk.IntVar(value=3)
-checkbox_thinking = tk.BooleanVar(value=False)
-checkbox_show_thinking = tk.BooleanVar(value=False)
-checkbox_memory_recall = tk.BooleanVar(value=True)
 
 def open_settings():
     settings_window = tk.Toplevel(root)
@@ -212,10 +250,7 @@ def open_settings():
     )
     slider_contexts.pack(anchor='w')
 
-
-memorization.set_gui_vars(keyword_count_var, context_count_var)
-
-
+# === CONFIGURATION DE L'INTERFACE ===
 root.title("LLM Assistant")
 root.geometry("800x500")
 root.configure(bg="#323232")
@@ -451,5 +486,9 @@ github_link.pack(side=tk.LEFT)
 github_link.bind("<Button-1>", open_github)
 
 bring_to_front()
+
+# Lancer le thread de préchargement des modèles AVANT l'ouverture de la fenêtre principale
+preload_thread = threading.Thread(target=preload_models_and_update_status, daemon=True)
+preload_thread.start()
 
 root.mainloop()

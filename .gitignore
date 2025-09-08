@@ -201,6 +201,6 @@ cython_debug/
 # Spécifique à ce projet
 lab/
 resources/
-datas/conversations_cleanwithvectors.db
+datas/conversations_example_clean.db
 datas/conversations.db
 datas/conversations
