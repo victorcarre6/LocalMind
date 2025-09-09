@@ -677,6 +677,7 @@ def show_infos(keywords_list=None, context_list=None):
     info_window.transient(None)
     info_window.grab_set()
 
+    # --- Extract prompt_keywords ONCE for reuse ---
     try:
         prompt_keywords = extract_keywords(prompt, top_n=15)
     except Exception:
@@ -687,7 +688,6 @@ def show_infos(keywords_list=None, context_list=None):
 
     # --- Keywords Tab ---
     tab_keywords = ttk.Frame(notebook, style="TFrame")
-    tab_keywords.configure(bg="#323232")
     notebook.add(tab_keywords, text="Keywords")
 
     def plot_keywords_bar(ax, kw_list, title):
@@ -732,39 +732,48 @@ def show_infos(keywords_list=None, context_list=None):
 
     # --- Contexts Tab ---
     tab_contexts = ttk.Frame(notebook, style="TFrame")
+    # tab_contexts.configure(bg="#323232")  # Removed: ttk.Frame does not support 'bg'
     notebook.add(tab_contexts, text="Contexts")
-    canvas = tk.Canvas(tab_contexts, bg="#323232", highlightthickness=0)
-    scrollbar = ttk.Scrollbar(tab_contexts, orient="vertical", command=canvas.yview)
-    scrollable_frame = ttk.Frame(canvas, style="TFrame")
-    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
+    # Use a single scrollable Text widget for the entire contexts tab
+    text_frame = tk.Frame(tab_contexts, bg="#323232")
+    text_frame.pack(fill="both", expand=True)
+    scrollb = tk.Scrollbar(text_frame)
+    scrollb.pack(side="right", fill="y")
+    text_widget = tk.Text(
+        text_frame,
+        width=90,
+        height=38,
+        wrap="word",
+        bg="#323232",
+        fg="white",
+        font=("Segoe UI", 11),
+        bd=0,
+        padx=4,
+        pady=2,
+        yscrollcommand=scrollb.set
+    )
+    scrollb.config(command=text_widget.yview)
+    # Configure tags for styling
+    text_widget.tag_configure("user_label", foreground="#599258", font=("Segoe UI", 11, "bold"))
+    text_widget.tag_configure("user_input", foreground="#599258", font=("Segoe UI", 11, "bold"))
+    text_widget.tag_configure("assistant_label", foreground="#CECABF", font=("Segoe UI", 11, "bold"))
+    text_widget.tag_configure("assistant_output", foreground="#CECABF", font=("Segoe UI", 11))
+    text_widget.tag_configure("score", foreground="white", font=("Segoe UI", 10))
     if context_list:
         for idx, ctx in enumerate(context_list, 1):
             user_input = getattr(ctx, "user_input", "")
             llm_output = getattr(ctx, "llm_output", "")
             combined_score = getattr(ctx, "combined_score", 0)
-            text_widget = tk.Text(
-                scrollable_frame, width=90, height=7, wrap="word",
-                bg="#323232", fg="white", font=("Segoe UI", 11), bd=0, padx=4, pady=2
-            )
-            text_widget.tag_configure("user_label", foreground="#599258", font=("Segoe UI", 11, "bold"))
-            text_widget.tag_configure("user_input", foreground="#599258", font=("Segoe UI", 11, "bold"))
-            text_widget.tag_configure("assistant_label", foreground="#CECABF", font=("Segoe UI", 11, "bold"))
-            text_widget.tag_configure("assistant_output", foreground="#CECABF", font=("Segoe UI", 11))
-            text_widget.tag_configure("score", foreground="white", font=("Segoe UI", 10))
             text_widget.insert(tk.END, f"{idx}. ", ("score",))
             text_widget.insert(tk.END, "User: ", ("user_label",))
             text_widget.insert(tk.END, user_input.strip() + "\n", ("user_input",))
             text_widget.insert(tk.END, "Assistant: ", ("assistant_label",))
             text_widget.insert(tk.END, llm_output.strip() + "\n", ("assistant_output",))
-            text_widget.insert(tk.END, f"Score: {combined_score:.2f}", ("score",))
-            text_widget.config(state=tk.DISABLED)
-            text_widget.pack(anchor='w', pady=4, fill="x", expand=True)
+            text_widget.insert(tk.END, f"Score: {combined_score:.2f}\n\n", ("score",))
     else:
-        tk.Label(tab_contexts, text="No contexts available", fg="white", bg="#323232").pack(pady=20)
+        text_widget.insert(tk.END, "No contexts available", ("score",))
+    text_widget.config(state=tk.DISABLED)
+    text_widget.pack(side="left", fill="both", expand=True)
 
     # --- Heatmap Tab ---
     heatmap_tab = ttk.Frame(notebook, style="TFrame")
