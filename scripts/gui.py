@@ -7,15 +7,15 @@ import webbrowser
 
 from llm_executor import generate_response
 import main
-from main import on_ask
+from main import on_ask, show_infos
 
 # === Fonctions principale ===
 
 root = tk.Tk()
 
 conversation_counter = 0
-keyword_count_var = tk.IntVar(value=5)
-context_count_var = tk.IntVar(value=3)
+keyword_count_var = tk.IntVar(value=10)
+context_count_var = tk.IntVar(value=5)
 checkbox_thinking = tk.BooleanVar(value=False)
 checkbox_show_thinking = tk.BooleanVar(value=False)
 checkbox_memory_recall = tk.BooleanVar(value=True)
@@ -211,6 +211,42 @@ def open_settings():
     )
     chk_instant_memory.pack(anchor='w', pady=2)
 
+    # --- Erase short-term memory label and button ---
+    erase_frame = tk.Frame(checkbox_frame, bg="#323232")
+    erase_frame.pack(anchor='w', pady=(4, 0), fill='x')
+
+    erase_label = tk.Label(
+        erase_frame,
+        text="Reset short-term memory",
+        fg="white",
+        bg="#323232"
+    )
+    erase_label.pack(side='top', anchor='w', pady=(0, 2))
+
+    def erase_short_term_memory():
+        global conversation_counter
+        conversation_counter = 0
+        try:
+            label_status.config(text="Short-term memory erased!", foreground="#ff6b6b")
+        except Exception:
+            pass
+
+    erase_btn = tk.Button(
+        erase_frame,
+        text="X",
+        command=erase_short_term_memory,
+        bg="#ff4d4d",
+        fg="white",
+        activebackground="#b30000",
+        activeforeground="white",
+        relief="flat",
+        font=("Segoe UI", 10, "bold"),
+        padx=2,
+        pady=2,
+        cursor="hand2"
+    )
+    erase_btn.pack(side='top', anchor='w', pady=(0, 4))
+
 
     # Sliders
     slider_keywords_frame = ttk.Frame(settings_frame, style='TFrame')
@@ -249,7 +285,7 @@ def open_settings():
 
 # === CONFIGURATION DE L'INTERFACE ===
 root.title("LLM Assistant")
-root.geometry("800x500")
+root.geometry("800x750")
 root.configure(bg="#323232")
 
 # Style global unique
@@ -465,10 +501,13 @@ right_buttons = ttk.Frame(status_buttons_frame, style='TFrame')
 right_buttons.pack(side=tk.RIGHT, anchor='e')
 
 btn_settings = ttk.Button(right_buttons, text="Settings", command=open_settings, style='Bottom.TButton', width=8)
-btn_settings.pack(side=tk.TOP, pady=(0, 3))
+btn_settings.pack(side=tk.LEFT, padx=(0, 5))
+
+btn_infos = ttk.Button(right_buttons, text="More", command=show_infos, style='Bottom.TButton', width=8)
+btn_infos.pack(side=tk.LEFT, padx=(0, 5))
 
 btn_help = ttk.Button(right_buttons, text="Help", style='Bottom.TButton', command=show_help, width=8)
-btn_help.pack(side=tk.TOP)
+btn_help.pack(side=tk.LEFT, padx=(0, 0))
 
 
 # === FOOTER ===

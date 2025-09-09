@@ -6,6 +6,8 @@ import os
 import re
 import sqlite3
 import warnings
+import tkinter as tk
+from tkinter import ttk
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,8 +20,13 @@ from langdetect import detect
 from langdetect.lang_detect_exception import LangDetectException
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+from sklearn.metrics.pairwise import cosine_similarity
 from transformers import T5ForConditionalGeneration, T5Tokenizer, logging as transformers_logging, pipeline
 from keybert import KeyBERT
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 # === INITIALISATION ===
 
@@ -312,9 +319,11 @@ def set_gui_vars(keyword_var, context_var):
 
 keyword_count_var = None
 context_count_var = None
+keywords = None
+context = None
 
 def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0, instant_memory=True):
-
+    global context, prompt
     pipeline = LanguagePipeline(user_input)
     lang = pipeline.lang
 
@@ -383,7 +392,7 @@ def extract_keywords(text, top_n=5, pipeline=None):
     ]
 
 def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
-    global embedding_model, faiss_index, keyword_count_var
+    global embedding_model, faiss_index, keyword_count_var, keywords
     if not recall:
         return []
 
@@ -651,3 +660,209 @@ def insert_conversation_if_new(user_input, llm_output, llm_model, keyword_count=
     kw_thread.join()
 
     return True
+
+# === FONCTIONS TERTIAIRES ===
+
+def show_infos(keywords_list=None, context_list=None):
+    global keywords, context, prompt
+    if keywords_list is None:
+        keywords_list = keywords
+    if context_list is None:
+        context_list = context
+
+    info_window = tk.Toplevel()
+    info_window.title("Information about the generated prompt and the database")
+    info_window.geometry("800x750")
+    info_window.configure(bg="#323232")
+    info_window.transient(None)
+    info_window.grab_set()
+
+    try:
+        prompt_keywords = extract_keywords(prompt, top_n=15)
+    except Exception:
+        prompt_keywords = []
+
+    notebook = ttk.Notebook(info_window, style="TNotebook")
+    notebook.pack(fill="both", expand=True, padx=10, pady=10)
+
+    # --- Keywords Tab ---
+    tab_keywords = ttk.Frame(notebook, style="TFrame")
+    tab_keywords.configure(bg="#323232")
+    notebook.add(tab_keywords, text="Keywords")
+
+    def plot_keywords_bar(ax, kw_list, title):
+        sorted_kw = sorted(kw_list, key=lambda kw: kw.score, reverse=True)
+        kw_lemmas = [kw.kw_lemma for kw in sorted_kw]
+        freqs = [kw.freq for kw in sorted_kw]
+        weights = [kw.weight for kw in sorted_kw]
+        scores = [kw.score for kw in sorted_kw]
+        bar_width = 0.25
+        x = list(range(len(kw_lemmas)))
+        ax.bar([i-bar_width for i in x], freqs, width=bar_width, label="Frequency", color="#599258")
+        ax.bar(x, weights, width=bar_width, label="Weight", color="#a2d149")
+        ax.bar([i+bar_width for i in x], scores, width=bar_width, label="Score", color="#e08c26")
+        ax.set_facecolor("#323232")
+        ax.set_xticks(x)
+        ax.set_xticklabels(kw_lemmas, rotation=45, ha='right', color="white", fontsize=9)
+        ax.tick_params(axis='y', colors="white", labelsize=10)
+        ax.set_title(title, color="white", fontsize=9, fontweight='bold')
+        ax.legend(facecolor="#323232", labelcolor="white")
+        for spine in ax.spines.values():
+            spine.set_color('white')
+        return ax
+
+    if keywords_list and isinstance(keywords_list[0], KeywordsData):
+        fig, ax = plt.subplots(figsize=(10, 3.5), dpi=100)
+        plot_keywords_bar(ax, keywords_list, "Frequency, weight, and score from initial prompt keywords")
+        fig.tight_layout()
+        canvas1 = FigureCanvasTkAgg(fig, master=tab_keywords)
+        canvas1.draw()
+        canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=False, padx=10, pady=(10, 0))
+        plt.close(fig)
+        if prompt_keywords and isinstance(prompt_keywords[0], KeywordsData):
+            fig2, ax2 = plt.subplots(figsize=(10, 4), dpi=100)
+            plot_keywords_bar(ax2, prompt_keywords, "Frequency, weight, and score from generated prompt keywords")
+            fig2.tight_layout()
+            canvas2 = FigureCanvasTkAgg(fig2, master=tab_keywords)
+            canvas2.draw()
+            canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=False, padx=10, pady=(20, 0))
+            plt.close(fig2)
+    else:
+        tk.Label(tab_keywords, text="No keywords available", fg="white", bg="#323232").pack(pady=20)
+
+    # --- Contexts Tab ---
+    tab_contexts = ttk.Frame(notebook, style="TFrame")
+    notebook.add(tab_contexts, text="Contexts")
+    canvas = tk.Canvas(tab_contexts, bg="#323232", highlightthickness=0)
+    scrollbar = ttk.Scrollbar(tab_contexts, orient="vertical", command=canvas.yview)
+    scrollable_frame = ttk.Frame(canvas, style="TFrame")
+    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+    if context_list:
+        for idx, ctx in enumerate(context_list, 1):
+            user_input = getattr(ctx, "user_input", "")
+            llm_output = getattr(ctx, "llm_output", "")
+            combined_score = getattr(ctx, "combined_score", 0)
+            text_widget = tk.Text(
+                scrollable_frame, width=90, height=7, wrap="word",
+                bg="#323232", fg="white", font=("Segoe UI", 11), bd=0, padx=4, pady=2
+            )
+            text_widget.tag_configure("user_label", foreground="#599258", font=("Segoe UI", 11, "bold"))
+            text_widget.tag_configure("user_input", foreground="#599258", font=("Segoe UI", 11, "bold"))
+            text_widget.tag_configure("assistant_label", foreground="#CECABF", font=("Segoe UI", 11, "bold"))
+            text_widget.tag_configure("assistant_output", foreground="#CECABF", font=("Segoe UI", 11))
+            text_widget.tag_configure("score", foreground="white", font=("Segoe UI", 10))
+            text_widget.insert(tk.END, f"{idx}. ", ("score",))
+            text_widget.insert(tk.END, "User: ", ("user_label",))
+            text_widget.insert(tk.END, user_input.strip() + "\n", ("user_input",))
+            text_widget.insert(tk.END, "Assistant: ", ("assistant_label",))
+            text_widget.insert(tk.END, llm_output.strip() + "\n", ("assistant_output",))
+            text_widget.insert(tk.END, f"Score: {combined_score:.2f}", ("score",))
+            text_widget.config(state=tk.DISABLED)
+            text_widget.pack(anchor='w', pady=4, fill="x", expand=True)
+    else:
+        tk.Label(tab_contexts, text="No contexts available", fg="white", bg="#323232").pack(pady=20)
+
+    # --- Heatmap Tab ---
+    heatmap_tab = ttk.Frame(notebook, style="TFrame")
+    notebook.add(heatmap_tab, text="Heatmap Correlation")
+    if prompt_keywords and isinstance(prompt_keywords[0], KeywordsData):
+        kw_lemmas = [kw.kw_lemma for kw in prompt_keywords]
+        embeddings = embedding_model.encode(kw_lemmas)
+        sim_matrix = cosine_similarity(embeddings)
+        fig_hm, ax_hm = plt.subplots(figsize=(10, 10), dpi=100)
+        heatmap = sns.heatmap(
+            sim_matrix, xticklabels=kw_lemmas, yticklabels=kw_lemmas,
+            cmap="coolwarm", annot=False, ax=ax_hm, vmax=0.6, color="white",
+            cbar_kws={'label': 'Similarity', 'shrink': 0.65, 'aspect': 20}, square=True
+        )
+        cbar = heatmap.collections[0].colorbar
+        cbar.set_label('Similarity', color='white')
+        cbar.ax.yaxis.set_tick_params(color='white')
+        cbar.outline.set_edgecolor('white')
+        plt.setp(cbar.ax.get_yticklabels(), color='white')
+        ax_hm.set_title("Keywords semantic similarity", color="white", fontsize=10, fontweight='bold')
+        ax_hm.tick_params(axis='x', colors="white", labelsize=8, pad=20)
+        ax_hm.tick_params(axis='y', colors="white", labelsize=8)
+        fig_hm.patch.set_facecolor("#323232")
+        ax_hm.set_facecolor("#323232")
+        plt.tight_layout(pad=3)
+        fig_hm.subplots_adjust(left=0.25, right=0.95, bottom=0.25, top=1)
+        container = tk.Frame(heatmap_tab, bg="#323232")
+        container.pack(fill='both', expand=True)
+        top_right_frame = tk.Frame(container, bg="#323232")
+        top_right_frame.pack(anchor='ne', expand=True, padx=20, pady=20)
+        canvas_hm = FigureCanvasTkAgg(fig_hm, master=top_right_frame)
+        canvas_hm.draw()
+        canvas_hm.get_tk_widget().pack()
+        plt.close(fig_hm)
+    else:
+        tk.Label(heatmap_tab, text="No valid data to display heatmap.", fg="white", bg="#323232").pack(pady=20)
+    plt.close('all')
+
+    # --- Database Tab ---
+    stats_tab = ttk.Frame(notebook, style="TFrame")
+    notebook.add(stats_tab, text="Database")
+    frame_stats = tk.Frame(stats_tab, bg="#323232")
+    frame_stats.pack(fill="both", expand=True, padx=20, pady=20)
+    conn = sqlite3.connect(config["data"]["db_path"])
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM conversations")
+    nb_conversations = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(DISTINCT keyword) FROM vectors")
+    nb_mots_clefs_uniques = cur.fetchone()[0]
+    cur.execute("""
+        SELECT keyword, COUNT(*) as freq
+        FROM vectors
+        GROUP BY keyword
+        ORDER BY freq DESC
+        LIMIT 20
+    """)
+    top_keywords = cur.fetchall()
+    cur.execute("SELECT llm_model, COUNT(*) FROM conversations GROUP BY llm_model")
+    model_counts = cur.fetchall()
+    conn.close()
+    tk.Label(frame_stats, text="Overall database statistics", fg="white", bg="#323232", font=("Segoe UI", 12, "bold")).pack(pady=(0, 20))
+    tk.Label(frame_stats, text=f"Number of conversations : {nb_conversations}", fg="white", bg="#323232", font=("Segoe UI", 12)).pack(anchor="w", pady=2)
+    tk.Label(frame_stats, text=f"Number of keywords : {nb_mots_clefs_uniques}", fg="white", bg="#323232", font=("Segoe UI", 12)).pack(anchor="w", pady=2)
+    two_col_frame = tk.Frame(frame_stats, bg="#323232")
+    two_col_frame.pack(expand=True, fill="both", pady=20)
+    titles_frame = tk.Frame(two_col_frame, bg="#323232")
+    titles_frame.pack(fill="x", padx=(0, 30), pady=(0, 5))
+    header_font = ("Segoe UI", 10, "bold")
+    tk.Label(titles_frame, text="Most frequent keywords", font=header_font, fg="white", bg="#323232", anchor="w").pack(side="left", padx=(0,180))
+    tk.Label(titles_frame, text="Conversations by LLM models", font=header_font, fg="white", bg="#323232", anchor="w").pack(side="left", expand=True, pady=0)
+    table_frame = tk.Frame(two_col_frame, bg="#323232")
+    table_frame.pack(side="left", fill="y", padx=(0, 30))
+    tk.Label(table_frame, text="Keywords", fg="white", bg="#323232", font=header_font, width=20, anchor="w").grid(row=0, column=0, sticky="w", padx=3, pady=2)
+    tk.Label(table_frame, text="Frequency", fg="white", bg="#323232", font=header_font, width=10, anchor="w").grid(row=0, column=1, sticky="w", padx=3, pady=2)
+    data_font = ("Segoe UI", 10)
+    for i, (keyword, freq) in enumerate(top_keywords, start=1):
+        tk.Label(table_frame, text=keyword, fg="white", bg="#323232", font=data_font, anchor="w", width=20).grid(row=i, column=0, sticky="w", padx=3, pady=1)
+        tk.Label(table_frame, text=str(freq), fg="white", bg="#323232", font=data_font, anchor="w", width=10).grid(row=i, column=1, sticky="w", padx=3, pady=1)
+    graph_frame = tk.Frame(two_col_frame, bg="#323232")
+    graph_frame.pack(side="left", expand=True, fill="both", padx=(0, 10))
+    models = [row[0] for row in model_counts]
+    counts = [row[1] for row in model_counts]
+    fig_model, ax_model = plt.subplots(figsize=(5, 4.5), dpi=100, facecolor='none')
+    bars = ax_model.bar(models, counts, color="#599258", width=0.5)
+    ax_model.set_facecolor("#323232")
+    for spine in ['bottom', 'left', 'top', 'right']:
+        ax_model.spines[spine].set_visible(True)
+        ax_model.spines[spine].set_color('white')
+    ax_model.set_xticks([])
+    ax_model.tick_params(axis='y', which='both', colors='white', labelsize=8)
+    ax_model.set_ylabel("Count", color="white", fontsize=9)
+    ax_model.set_xlabel("LLM Models", color="white", fontsize=9)
+    plt.tight_layout()
+    fig_model.patch.set_facecolor("#323232")
+    for bar, model in zip(bars, models):
+        height = bar.get_height()
+        ax_model.text(bar.get_x() + bar.get_width()/2, height/2, model, rotation=90, ha='center', va='bottom', color='white', fontsize=8)
+    canvas_model = FigureCanvasTkAgg(fig_model, master=graph_frame)
+    canvas_model.draw()
+    canvas_model.get_tk_widget().pack(expand=True, fill="both", pady=(0, 0))
+    plt.close(fig_model)
