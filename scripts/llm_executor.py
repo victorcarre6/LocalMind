@@ -81,13 +81,13 @@ def generate_response(user_input: str, input_text: str, enable_thinking: bool, s
     formatted_response = text_formatting(raw_response)
     clean_response = remove_think_blocks(formatted_response)
     end_generate = time.time()
-    print(f"[TIMER] Durée de génération de la réponse : {end_generate - start_generate:.1f} s")
+    print(f"Durée de génération de la réponse : {end_generate - start_generate:.1f} s")
     # Insert directement dans la base SQL
     start_sync = time.time()
     init_db_connection(db_path)
     insert_conversation_if_new(user_input, clean_response, model_path.name)
     end_sync = time.time()
-    print(f"[TIMER] Échange ajouté à la base de donnée en {end_sync - start_sync:.1f} s.")
+    print(f"Échange ajouté à la base de donnée en {end_sync - start_sync:.1f} s.")
     if not show_thinking:
         return clean_response
     else:

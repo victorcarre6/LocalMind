@@ -119,21 +119,13 @@ def save_faiss_index(index):
 
 
 def load_models_in_background():
-    """
-    Charge tous les modèles nécessaires en tâche de fond pour accélérer l'ouverture de la GUI.
-    """
     global embedding_model, summarizing_pipeline, _SPACY_MODELS, _KEYBERT_MODELS, faiss_index
     import time
     try:
-        t0 = time.time()
         # Charger le modèle d'embedding
-        t_start_embedding = time.time()
         embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-        t_end_embedding = time.time()
-        print(f"[TIMER model] embedding_model loaded in {t_end_embedding - t_start_embedding:.1f} s")
 
         # Charger le pipeline de résumé HuggingFace
-        t_start_summarizer = time.time()
         model_name = "Falconsai/text_summarization"
         summarizing_pipeline = pipeline(
             task="summarization",
@@ -142,17 +134,9 @@ def load_models_in_background():
             framework="pt",
             device=0  # mettre -1 si uniquement CPU
         )
-        t_end_summarizer = time.time()
-        print(f"[TIMER model] summarizing_pipeline loaded in {t_end_summarizer - t_start_summarizer:.1f} s")
-
-        # NE PAS précharger SpaCy et KeyBERT ici (chargement lazy, voir LanguagePipeline)
 
         # Charger l'index FAISS
-        t_start_faiss = time.time()
         faiss_index = load_faiss_index()
-        t_end_faiss = time.time()
-        print(f"[TIMER model] FAISS index loaded in {t_end_faiss - t_start_faiss:.1f} s")
-
     except Exception as e:
         print(f"[ERREUR] lors du préchargement des modèles : {type(e).__name__} - {e}")
 
@@ -218,16 +202,10 @@ class LanguagePipeline:
             return self._nlp
         lang_code = "en" if self.lang.startswith("en") else "fr"
         if lang_code not in _SPACY_MODELS:
-            import time
-            t0 = time.time()
             if lang_code == "en":
-                print("[TIMER model] Loading SpaCy EN (lazy)...")
                 _SPACY_MODELS["en"] = spacy.load("en_core_web_lg")
             else:
-                print("[TIMER model] Loading SpaCy FR (lazy)...")
                 _SPACY_MODELS["fr"] = spacy.load("fr_core_news_lg")
-            t1 = time.time()
-            print(f"[TIMER model] SpaCy {lang_code.upper()} loaded in {t1 - t0:.1f} s (lazy)")
         self._nlp = _SPACY_MODELS[lang_code]
         return self._nlp
 
@@ -242,13 +220,9 @@ class LanguagePipeline:
             from sentence_transformers import SentenceTransformer
             t0 = time.time()
             if lang_code == "en":
-                print("[TIMER model] Loading KeyBERT EN (lazy)...")
                 _KEYBERT_MODELS["en"] = KeyBERT(model=SentenceTransformer("allenai/scibert_scivocab_uncased"))
             else:
-                print("[TIMER model] Loading KeyBERT FR (lazy)...")
                 _KEYBERT_MODELS["fr"] = KeyBERT(model=SentenceTransformer("camembert-base"))
-            t1 = time.time()
-            print(f"[TIMER model] KeyBERT {lang_code.upper()} loaded in {t1 - t0:.1f} s (lazy)")
         self._kw_model = _KEYBERT_MODELS[lang_code]
         return self._kw_model
 
@@ -342,23 +316,12 @@ keyword_count_var = None
 context_count_var = None
 
 def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0):
-    t0 = time.time()
 
-    # 1. Détection de la langue
     pipeline = LanguagePipeline(user_input)
     lang = pipeline.lang
-    t1 = time.time()
-    print(f"[TIMER on_ask] Durée de détection langue: {t1 - t0:.1f} s")
 
-    # 2. Récupération du contexte
     context = get_relevant_context(user_input, limit=context_limit, recall=recall, pipeline=pipeline)
-    t2 = time.time()
-    print(f"[TIMER on_ask] Durée de récupération contexte: {t2 - t1:.1f} s")
-
-    # 3. Génération du prompt
     prompt = generate_prompt_paragraph(context, user_input, lang=lang, history_limit=history_limit)
-    t3 = time.time()
-    print(f"[TIMER on_ask] Durée de génération du prompt: {t3 - t2:.1f} s")
     return prompt
 
 def extract_keywords(text, top_n=5, pipeline=None):
@@ -417,17 +380,12 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
     if not recall:
         return []
 
-    t0 = time.time()
     # === 1. Embedding de la question utilisateur ===
-    t1 = time.time()
     query_vec = embedding_model.encode([user_question], convert_to_tensor=False, batch_size=16)
     query_vec = np.array(query_vec).astype('float32')
     faiss.normalize_L2(query_vec)
-    t2 = time.time()
-    print(f"[TIMER context] Embedding de la question utilisateur : {t2 - t1:.1f} s")
 
     # === 2. Récupération des vecteurs stockés ===
-    t3 = time.time()
     try:
         cur.execute("SELECT conversation_id, vector FROM conversation_vectors")
         vector_rows = cur.fetchall()
@@ -447,11 +405,8 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
     if not stored_vectors:
         return []
     stored_vectors = np.vstack(stored_vectors).astype('float32')
-    t4 = time.time()
-    print(f"[TIMER context] Récupération des vecteurs stockés : {t4 - t3:.1f} s")
 
     # === 3. Synchronisation & recherche FAISS ===
-    t5 = time.time()
     if faiss_index.ntotal != len(stored_vectors):
         faiss_index.reset()
         faiss.normalize_L2(stored_vectors)
@@ -467,20 +422,14 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
         return []
     # Scores de similarité initiale
     final_sim_scores = {convo_ids[idx]: float(score) for score, idx in zip(D[0], I[0])}
-    t6 = time.time()
-    print(f"[TIMER context] Synchronisation & recherche FAISS : {t6 - t5:.1f} s")
 
     # === 4. Extraction des mots-clés de la question ===
-    t7 = time.time()
     keyword_count = keyword_count_var.get() if 'keyword_count_var' in globals() and keyword_count_var is not None else 5
     keywords = extract_keywords(user_question, top_n=keyword_count)
     keyword_lemmas = set(kw.kw_lemma for kw in keywords)
     kw_score_map = {kw.kw_lemma: kw.score for kw in keywords}
-    t8 = time.time()
-    print(f"[TIMER context] Extraction des mots-clés : {t8 - t7:.1f} s")
 
     # === 5. Récupération des conversations candidates ===
-    t9 = time.time()
     placeholders_ids = ','.join(['?'] * len(matched_convo_ids))
     cur.execute(f'''
         SELECT user_input, llm_output, llm_model, timestamp, id, llm_output_summary
@@ -490,8 +439,6 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
     context_rows = cur.fetchall()
     if not context_rows:
         return []
-    t10 = time.time()
-    print(f"[TIMER context] Récupération des conversations candidates : {t10 - t9:.1f} s")
 
     # === 6. Reranking des contextes ===
     filtered_context = []
@@ -522,16 +469,8 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
             score_rerank=score_rerank
         ))
 
-    t12 = time.time()
-    print(f"[TIMER context] Reranking des contextes : {t12 - t10:.1f} s")
-
     # === 7. Tri final par score combiné ===
-    t13 = time.time()
     filtered_context.sort(key=lambda x: x.combined_score, reverse=True)
-    t14 = time.time()
-    print(f"[TIMER context] Tri final : {t14 - t13:.1f} s")
-
-    print(f"[TIMER context] Durée totale : {t14 - t0:.1f} s")
     return filtered_context[:limit]
 
 def summarize(text, focus_terms=None, max_length=50):
@@ -629,16 +568,6 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
     return "\n".join(parts)
 
 def insert_conversation_if_new(user_input, llm_output, llm_model, keyword_count=5, conversation_id=None):
-    """Insère une nouvelle conversation dans la base de données si elle n'existe pas déjà
-
-    Args:
-        user_input (str): La question de l'utilisateur
-        llm_output (str): La réponse du modèle
-        llm_model (str): Le nom du modèle utilisé
-
-    Returns:
-        bool: True si la conversation a été insérée, False si elle existait déjà
-    """
     global embedding_model, faiss_index
     if cur is None:
         raise ValueError("La base de données n'est pas initialisée.")
@@ -649,12 +578,8 @@ def insert_conversation_if_new(user_input, llm_output, llm_model, keyword_count=
     if cur.fetchone():
         return False
 
-    t0 = time.time()
     cleaned_output = format_cleaner(llm_output)
-    t1 = time.time()
     compressed_output = compress_text(cleaned_output)
-    t2 = time.time()
-    print(f"[TIMER insert] Durée de compress_text: {t2 - t1:.1f} s")
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

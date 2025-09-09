@@ -46,43 +46,24 @@ def on_generate(event=None):
         update_status("Please enter a question.", error=True)
         return
 
-    running_prompt = True
-
-    def update_chrono_prompt():
-        nonlocal running_prompt
-        if not running_prompt:
-            return
-        elapsed = time.time() - start_on_generate
-        update_status(f"Processing prompt... ({elapsed:.1f}s)")
-        root.after(100, update_chrono_prompt)
-
-    update_chrono_prompt()
+    update_status("Processing prompt...")
 
     root.update()
 
     try:
         start_on_ask = time.time()
         final_prompt = on_ask(user_input, context_limit=context_count, keyword_count=keyword_count, recall=memory_recall, history_limit=history_limit)
-        running_prompt = False
         end_on_ask = time.time()
 
-        print("--INFO-- final_prompt :")
+        print("")
+        print("==== PROMPT GÉNÉRÉ ====")
         print(final_prompt)
-
+        print("")
         print("==== MÉTRIQUES DE LA CONVERSATION ====")
-        print(f"[TIMER on_generate (on_ask total)] Durée de processing du prompt : {end_on_ask - start_on_ask:.2f} s")
+        print(f"Durée de processing du prompt : {end_on_ask - start_on_ask:.2f} s")
 
-        running_response = True
-
-        def update_chrono_response():
-            nonlocal running_response
-            if not running_response:
-                return
-            elapsed = time.time() - end_on_ask
-            update_status(f"Generating response... ({elapsed:.1f}s)")
-            root.after(100, update_chrono_response)
-
-        update_chrono_response()
+        update_status("Generating response...")
+        root.update()
 
         response = generate_response(
             user_input,
@@ -91,10 +72,10 @@ def on_generate(event=None):
             show_thinking=checkbox_show_thinking.get()
         )
         end_generate = time.time()
-        running_response = False
-        print(f"[TIMER on_generate] Durée totale de l'échange : {end_generate - start_on_generate:.2f} s")
+        print(f"Durée totale de l'échange : {end_generate - start_on_generate:.2f} s")
+        
         conversation_counter += 1
-        print(f"--INFO-- conversation_counter: {conversation_counter}")
+
         # Insert user message in chat history
         chat_history.config(state=tk.NORMAL)
         chat_history.insert(tk.END, "You: " + user_input + "\n", "user")
@@ -105,7 +86,6 @@ def on_generate(event=None):
         update_status(f"Response generated successfully ({end_generate - start_on_generate:.1f} s).", success=True)
         
     except Exception as e:
-        running_prompt = False
         update_status(f"Error: {e}", error=True)
 
 
