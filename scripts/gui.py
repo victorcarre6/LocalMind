@@ -19,6 +19,7 @@ context_count_var = tk.IntVar(value=3)
 checkbox_thinking = tk.BooleanVar(value=False)
 checkbox_show_thinking = tk.BooleanVar(value=False)
 checkbox_memory_recall = tk.BooleanVar(value=True)
+checkbox_instant_memory = tk.BooleanVar(value=True)
 
 main.set_gui_vars(keyword_count_var, context_count_var)
 
@@ -41,6 +42,7 @@ def on_generate(event=None):
     context_count = context_count_var.get()
     keyword_count = keyword_count_var.get()
     memory_recall = checkbox_memory_recall.get()
+    instant_memory = checkbox_instant_memory.get()
 
     if not user_input:
         update_status("Please enter a question.", error=True)
@@ -52,7 +54,14 @@ def on_generate(event=None):
 
     try:
         start_on_ask = time.time()
-        final_prompt = on_ask(user_input, context_limit=context_count, keyword_count=keyword_count, recall=memory_recall, history_limit=history_limit)
+        final_prompt = on_ask(
+            user_input,
+            context_limit=context_count,
+            keyword_count=keyword_count,
+            recall=memory_recall,
+            history_limit=history_limit,
+            instant_memory=instant_memory
+        )
         end_on_ask = time.time()
 
         print("")
@@ -188,11 +197,19 @@ def open_settings():
 
     chk_memory_recall = ttk.Checkbutton(
         checkbox_frame,
-        text="Memory Recall",
+        text="Long-term memory",
         variable=checkbox_memory_recall,
         style='Custom.TCheckbutton'
     )
     chk_memory_recall.pack(anchor='w', pady=2)
+
+    chk_instant_memory = ttk.Checkbutton(
+        checkbox_frame,
+        text="Short-term memory",
+        variable=checkbox_instant_memory,
+        style='Custom.TCheckbutton'
+    )
+    chk_instant_memory.pack(anchor='w', pady=2)
 
 
     # Sliders

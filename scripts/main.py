@@ -6,7 +6,6 @@ import os
 import re
 import sqlite3
 import warnings
-import time
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -116,7 +115,6 @@ def load_faiss_index():
 
 def save_faiss_index(index):
     faiss.write_index(index, str(FAISS_INDEX_PATH))
-
 
 def load_models_in_background():
     global embedding_model, summarizing_pipeline, _SPACY_MODELS, _KEYBERT_MODELS, faiss_index
@@ -315,13 +313,22 @@ def set_gui_vars(keyword_var, context_var):
 keyword_count_var = None
 context_count_var = None
 
-def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0):
+def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0, instant_memory=True):
 
     pipeline = LanguagePipeline(user_input)
     lang = pipeline.lang
 
-    context = get_relevant_context(user_input, limit=context_limit, recall=recall, pipeline=pipeline)
-    prompt = generate_prompt_paragraph(context, user_input, lang=lang, history_limit=history_limit)
+    context = get_relevant_context(
+        user_input, 
+        limit=context_limit, 
+        recall=recall, 
+        pipeline=pipeline)
+    prompt = generate_prompt_paragraph(
+        context, 
+        user_input, 
+        lang=lang, 
+        history_limit=history_limit, 
+        instant_memory=instant_memory)
     return prompt
 
 def extract_keywords(text, top_n=5, pipeline=None):
@@ -473,6 +480,16 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
     filtered_context.sort(key=lambda x: x.combined_score, reverse=True)
     return filtered_context[:limit]
 
+def get_last_conversations_with_summary(limit=3):
+    cur.execute("""
+        SELECT user_input, llm_output_summary
+        FROM conversations
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
+    rows = cur.fetchall()
+    return rows[::-1]
+
 def summarize(text, focus_terms=None, max_length=50):
     global summarizing_pipeline
     try:
@@ -499,13 +516,13 @@ def summarize(text, focus_terms=None, max_length=50):
         summary = text[:max_length] + "... [résumé tronqué]"
         return summary
 
-def generate_prompt_paragraph(context, question, keywords=None, lang=None, history_limit=0):
+def generate_prompt_paragraph(context, question, keywords=None, lang=None, history_limit=0, instant_memory=True):
     global context_count
     if not context:
         return f"<|im_start|>user\n{question} <|im_end|>\n<|im_start|>assistant"
 
     limit = context_count_var.get() if 'context_count_var' in globals() else 5
-    # Préparation des données pour ANCIENNES CONVERSATIONS
+
     processed_items = []
     for idx, item in enumerate(context[:limit], start=1):
         try:
@@ -517,50 +534,38 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
         except Exception as e:
             print(f"Erreur traitement item : {e}")
             continue
-
     context_count = len(processed_items)
-    # Préparation des données pour DERNIERS ECHANGES
-    def get_last_conversations_with_summary(limit=3):
-        cur.execute("""
-            SELECT user_input, llm_output_summary
-            FROM conversations
-            ORDER BY id DESC
-            LIMIT ?
-        """, (limit,))
-        rows = cur.fetchall()
-        return rows[::-1]
 
-    last_convos = get_last_conversations_with_summary(limit=history_limit)
     processed_last_convos = []
-    for idx, (user_input, llm_output_summary) in enumerate(last_convos, start=1):
-        try:
-            shortened_user_input = str(user_input)[:300]
-            summary = llm_output_summary if llm_output_summary is not None else ""
-            processed_last_convos.append((idx, shortened_user_input, summary))
-        except Exception as e:
-            print(f"Erreur traitement item : {e}")
-            continue
-
-    if not processed_items:
-        return f"<|im_start|>user\n{question} <|im_end|>\n<|im_start|>assistant"
+    if instant_memory:
+        last_convos = get_last_conversations_with_summary(limit=history_limit)
+        for idx, (user_input, llm_output_summary) in enumerate(last_convos, start=1):
+            try:
+                shortened_user_input = str(user_input)[:300]
+                summary = llm_output_summary if llm_output_summary is not None else ""
+                processed_last_convos.append((idx, shortened_user_input, summary))
+            except Exception as e:
+                print(f"Erreur traitement item : {e}")
+                continue
+        if not processed_items:
+            return f"<|im_start|>user\n{question} <|im_end|>\n<|im_start|>assistant"
 
     parts = []
     parts.append('<|im_start|>system')
     parts.append("Réponds scientifiquement à QUESTION PRINCIPALE en utilisant le contexte fournit : priorise les DERNIERS ECHANGES, utilise les ANCIENNES CONVERSATIONS uniquement pour exemples ou contexte secondaire SI ILS ONT UN RAPPORT AVEC QUESTION PRINCIPALE. Ne répète pas les informations déjà mentionnées, surtout celles présentes dans DERNIERS ECHANGES. Rédige des réponses complètes, claires et concises. <|im_end|>" + system_prompt)
-    
-    # Section ANCIENNES CONVERSATIONS
+
     if processed_items:
         parts.append("\n### ANCIENNES CONVERSATIONS (contexte secondaire) ###")
         for idx, q, a in processed_items:
             parts.append(f"<|im_start|>user\n{q}<|im_end|>")
             parts.append(f"<|im_start|>assistant\n{a}<|im_end|>")
 
-    # Section DERNIERS ECHANGES (prioritaires)
     if processed_last_convos:
         parts.append("\n### DERNIERS ECHANGES (prioritaires, par ordre chronologique) ###")
         for idx, user_input_short, last_output_summary in processed_last_convos:
             parts.append(f"<|im_start|>user\n{user_input_short}<|im_end|>")
             parts.append(f"<|im_start|>assistant\n{last_output_summary}<|im_end|>")
+
     parts.append("\n### QUESTION PRINCIPALE ###")
     parts.append(f"<|im_start|>user\n{question} <|im_end|>")
     parts.append('<|im_start|>assistant')
