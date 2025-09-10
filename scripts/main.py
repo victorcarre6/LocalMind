@@ -561,7 +561,10 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
 
     parts = []
     parts.append('<|im_start|>system')
-    parts.append("Réponds scientifiquement à QUESTION PRINCIPALE en utilisant le contexte fournit : priorise les DERNIERS ECHANGES, utilise les ANCIENNES CONVERSATIONS uniquement pour exemples ou contexte secondaire SI ILS ONT UN RAPPORT AVEC QUESTION PRINCIPALE. Ne répète pas les informations déjà mentionnées, surtout celles présentes dans DERNIERS ECHANGES. Rédige des réponses complètes, claires et concises. <|im_end|>" + system_prompt)
+    parts.append("Réponds scientifiquement à QUESTION PRINCIPALE en utilisant le contexte fournit : priorise les DERNIERS ECHANGES, " \
+    "utilise les ANCIENNES CONVERSATIONS uniquement pour exemples ou contexte secondaire SI ILS ONT UN RAPPORT AVEC QUESTION PRINCIPALE. " \
+    "Ne répète pas les informations déjà mentionnées, surtout celles présentes dans DERNIERS ECHANGES. " \
+    "Rédige des réponses complètes, claires et concises. <|im_end|>" + system_prompt)
 
     if processed_items:
         parts.append("\n### ANCIENNES CONVERSATIONS (contexte secondaire) ###")

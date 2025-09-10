@@ -38,12 +38,33 @@ config = load_config(CONFIG_PATH)
 root = tk.Tk()
 
 conversation_counter = 0
-keyword_count_var = tk.IntVar(value=10)
-context_count_var = tk.IntVar(value=5)
-checkbox_thinking = tk.BooleanVar(value=False)
-checkbox_show_thinking = tk.BooleanVar(value=False)
-checkbox_memory_recall = tk.BooleanVar(value=True)
-checkbox_instant_memory = tk.BooleanVar(value=True)
+memory_conf = config.get("memory_parameters", {})
+llm_conf = config.get("models", {}).get("llm", {})
+
+keyword_count_var = tk.IntVar(value=memory_conf.get("keyword_count", 10))
+context_count_var = tk.IntVar(value=memory_conf.get("context_count", 5))
+checkbox_thinking = tk.BooleanVar(value=llm_conf.get("enable_thinking", False))
+checkbox_show_thinking = tk.BooleanVar(value=llm_conf.get("show_thinking", False))
+checkbox_memory_recall = tk.BooleanVar(value=memory_conf.get("memory_recall", True))
+checkbox_instant_memory = tk.BooleanVar(value=memory_conf.get("instant_memory", True))
+
+# --- Auto-save changes to config.json when variables change ---
+def save_gui_config(*args):
+    config["memory_parameters"]["keyword_count"] = keyword_count_var.get()
+    config["memory_parameters"]["context_count"] = context_count_var.get()
+    config["memory_parameters"]["memory_recall"] = checkbox_memory_recall.get()
+    config["memory_parameters"]["instant_memory"] = checkbox_instant_memory.get()
+    config["models"]["llm"]["enable_thinking"] = checkbox_thinking.get()
+    config["models"]["llm"]["show_thinking"] = checkbox_show_thinking.get()
+    with open(expand_path(CONFIG_PATH), "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+keyword_count_var.trace_add("write", save_gui_config)
+context_count_var.trace_add("write", save_gui_config)
+checkbox_thinking.trace_add("write", save_gui_config)
+checkbox_show_thinking.trace_add("write", save_gui_config)
+checkbox_memory_recall.trace_add("write", save_gui_config)
+checkbox_instant_memory.trace_add("write", save_gui_config)
 temp_var = tk.DoubleVar(value=config['models']['llm']['sampler_params']['temp'])
 label_temperature = None
 sys_prompt = tk.DoubleVar(value=config['models']['llm']['system_prompt'])
