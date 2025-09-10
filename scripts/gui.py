@@ -2,12 +2,36 @@ import threading
 import platform
 import tkinter as tk
 import time
+import json
+import os
+from pathlib import Path
 from tkinter import ttk, scrolledtext
 import webbrowser
-
 from llm_executor import generate_response
 import main
 from main import on_ask, show_infos
+
+# --- Config loading (robust, same as main.py) ---
+PROJECT_ROOT = Path(__file__).parent.parent
+
+def expand_path(value):
+    if isinstance(value, Path):
+        return str(value.resolve())
+    expanded = Path(os.path.expanduser(value))
+    if not expanded.is_absolute():
+        expanded = PROJECT_ROOT / expanded
+    return str(expanded.resolve())
+
+def load_config(config_path):
+    config_path = expand_path(config_path)
+    with open(config_path, "r", encoding="utf-8") as f:
+        raw_config = json.load(f)
+    config = raw_config
+    return config
+
+CONFIG_PATH = PROJECT_ROOT / "resources" / "config.json"
+config = load_config(CONFIG_PATH)
+
 
 # === Fonctions principale ===
 
@@ -20,9 +44,13 @@ checkbox_thinking = tk.BooleanVar(value=False)
 checkbox_show_thinking = tk.BooleanVar(value=False)
 checkbox_memory_recall = tk.BooleanVar(value=True)
 checkbox_instant_memory = tk.BooleanVar(value=True)
+temp_var = tk.DoubleVar(value=config['models']['llm']['sampler_params']['temp'])
+label_temperature = None
+sys_prompt = tk.DoubleVar(value=config['models']['llm']['system_prompt'])
 
 main.set_gui_vars(keyword_count_var, context_count_var)
 
+# === FONCTIONS PRINCIPALES ===
 
 def preload_models_and_update_status():
     label_status.config(text="Loading models...", foreground="#FFD700")
@@ -97,7 +125,71 @@ def on_generate(event=None):
     except Exception as e:
         update_status(f"Error: {e}", error=True)
 
+# === Fonctions de paramétrage ===
 
+def erase_short_term_memory():
+    global conversation_counter
+    conversation_counter = 0
+    try:
+        label_status.config(text="Short-term memory erased!", foreground="#ff6b6b")
+    except Exception:
+        pass
+
+def update_temp(val):
+    temp_val = round(float(val), 2)
+    if label_temperature is not None:
+        label_temperature.config(text=f"Temperature: {temp_val:.2f}")
+    config['models']['llm']['sampler_params']['temp'] = temp_val
+    # Use robust path for config
+    config_path = expand_path(CONFIG_PATH)
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+def open_system_prompt():
+    sp_window = tk.Toplevel(root)
+    sp_window.title("System Prompt")
+    sp_window.geometry("450x350")
+    sp_window.configure(bg="#323232")
+    sp_window.resizable(False, False)
+
+    sp_frame = ttk.Frame(sp_window, padding=10, style="TFrame")
+    sp_frame.pack(fill=tk.BOTH, expand=False)
+
+    text_widget = tk.Text(
+        sp_frame,
+        wrap="word",
+        font=("Segoe UI", 12),
+        bg="#1E1E1E",
+        fg="white",
+        insertbackground="white",
+        height=18
+    )
+    text_widget.pack(fill=tk.BOTH, expand=True)
+    # Insert current system_prompt from config
+    text_widget.insert("1.0", config['models']['llm'].get('system_prompt', ''))
+
+    def save_and_close():
+        new_prompt = text_widget.get("1.0", tk.END).strip()
+        update_system_prompt(new_prompt)
+        sp_window.destroy()
+
+    save_button = ttk.Button(
+        sp_frame,
+        text="Save",
+        command=save_and_close,
+        style="Green.TButton"
+    )
+    save_button.pack(pady=(5, 0))
+
+
+def update_system_prompt(new_prompt: str):
+    """
+    Updates the system_prompt in config and saves it to config.json.
+    """
+    config['models']['llm']['system_prompt'] = new_prompt
+    config_path = expand_path(CONFIG_PATH)
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
 
 # === Fonctions d'affichage ===
 
@@ -166,97 +258,50 @@ def bring_to_front():
     root.after(200, lambda: root.attributes('-topmost', False))
 
 def open_settings():
+    global temp_var, label_temperature
     settings_window = tk.Toplevel(root)
     settings_window.title("Settings")
-    settings_window.geometry("200x250")
+    settings_window.geometry("200x400")
     settings_window.configure(bg="#323232")
     settings_window.resizable(False, False)
 
     settings_frame = ttk.Frame(settings_window, padding=10, style='TFrame')
     settings_frame.pack(fill=tk.BOTH, expand=True)
 
-    # Checkboxes
-    checkbox_frame = ttk.Frame(settings_frame, style='TFrame')
-    checkbox_frame.pack(anchor='w')
-
-    chk_enable_thinking = ttk.Checkbutton(
-        checkbox_frame,
-        text="Enable Thinking",
-        variable=checkbox_thinking,
-        style='Custom.TCheckbutton'
-    )
-    chk_enable_thinking.pack(anchor='w', pady=2)
-
-    chk_show_thinking = ttk.Checkbutton(
-        checkbox_frame,
-        text="Show Thinking",
-        variable=checkbox_show_thinking,
-        style='Custom.TCheckbutton'
-    )
-    chk_show_thinking.pack(anchor='w', pady=2)
+    # --- Prompt Processing Section ---
+    lbl_prompt_header = ttk.Label(settings_frame, text="-- Prompt Processing --", style='TLabel', font=('Segoe UI', 14))
+    lbl_prompt_header.pack(anchor='center', pady=(0,5))
 
     chk_memory_recall = ttk.Checkbutton(
-        checkbox_frame,
+        settings_frame,
         text="Long-term memory",
         variable=checkbox_memory_recall,
         style='Custom.TCheckbutton'
     )
-    chk_memory_recall.pack(anchor='w', pady=2)
+    chk_memory_recall.pack(anchor='center', pady=2)
 
     chk_instant_memory = ttk.Checkbutton(
-        checkbox_frame,
+        settings_frame,
         text="Short-term memory",
         variable=checkbox_instant_memory,
         style='Custom.TCheckbutton'
     )
-    chk_instant_memory.pack(anchor='w', pady=2)
+    chk_instant_memory.pack(anchor='center', pady=2)
 
-    # --- Erase short-term memory label and button ---
-    erase_frame = tk.Frame(checkbox_frame, bg="#323232")
-    erase_frame.pack(anchor='w', pady=(4, 0), fill='x')
-
-    erase_label = tk.Label(
-        erase_frame,
+    erase_btn = ttk.Button(
+        settings_frame,
         text="Reset short-term memory",
-        fg="white",
-        bg="#323232"
-    )
-    erase_label.pack(side='top', anchor='w', pady=(0, 2))
-
-    def erase_short_term_memory():
-        global conversation_counter
-        conversation_counter = 0
-        try:
-            label_status.config(text="Short-term memory erased!", foreground="#ff6b6b")
-        except Exception:
-            pass
-
-    erase_btn = tk.Button(
-        erase_frame,
-        text="X",
         command=erase_short_term_memory,
-        bg="#ff4d4d",
-        fg="white",
-        activebackground="#b30000",
-        activeforeground="white",
-        relief="flat",
-        font=("Segoe UI", 10, "bold"),
-        padx=2,
-        pady=2,
+        style="Reset.TButton",
         cursor="hand2"
     )
-    erase_btn.pack(side='top', anchor='w', pady=(0, 4))
+    erase_btn.pack(anchor='center', pady=(4,8))
 
-
-    # Sliders
-    slider_keywords_frame = ttk.Frame(settings_frame, style='TFrame')
-    slider_keywords_frame.pack(anchor='w', pady=(0,10))
-
-    label_keyword_count = ttk.Label(slider_keywords_frame, text=f"Number of keywords: {keyword_count_var.get()}", style='TLabel')
-    label_keyword_count.pack(anchor='w')
+    label_keyword_count = ttk.Label(settings_frame, text=f"Number of keywords: {keyword_count_var.get()}", style='TLabel')
+    label_keyword_count.pack(anchor='center')
 
     slider_keywords = ttk.Scale(
-        slider_keywords_frame,
+        settings_frame,
         from_=1,
         to=15,
         orient="horizontal",
@@ -264,16 +309,13 @@ def open_settings():
         length=150,
         command=lambda val: label_keyword_count.config(text=f"Number of keywords: {int(float(val))}")
     )
-    slider_keywords.pack(anchor='w')
+    slider_keywords.pack(anchor='center', pady=(0,5))
 
-    slider_context_frame = ttk.Frame(settings_frame, style='TFrame')
-    slider_context_frame.pack(anchor='w', pady=(0,10))
-
-    label_contexts_count = ttk.Label(slider_context_frame, text=f"Number of contexts: {context_count_var.get()}", style='TLabel')
-    label_contexts_count.pack(anchor='w')
+    label_contexts_count = ttk.Label(settings_frame, text=f"Number of contexts: {context_count_var.get()}", style='TLabel')
+    label_contexts_count.pack(anchor='center')
 
     slider_contexts = ttk.Scale(
-        slider_context_frame,
+        settings_frame,
         from_=1,
         to=10,
         orient=tk.HORIZONTAL,
@@ -281,7 +323,57 @@ def open_settings():
         length=150,
         command=lambda val: label_contexts_count.config(text=f"Number of contexts: {int(float(val))}")
     )
-    slider_contexts.pack(anchor='w')
+    slider_contexts.pack(anchor='center', pady=(0,10))
+
+    # Vertical spacing
+    spacer = ttk.Label(settings_frame, text="")
+    spacer.pack(pady=(10,0))
+
+    # --- Model Tuning Section ---
+    lbl_model_header = ttk.Label(settings_frame, text="-- Model tuning --", style='TLabel', font=('Segoe UI', 14))
+    lbl_model_header.pack(anchor='center', pady=(0,5))
+
+    chk_enable_thinking = ttk.Checkbutton(
+        settings_frame,
+        text="Enable Thinking",
+        variable=checkbox_thinking,
+        style='Custom.TCheckbutton'
+    )
+    chk_enable_thinking.pack(anchor='center', pady=2)
+
+    chk_show_thinking = ttk.Checkbutton(
+        settings_frame,
+        text="Show Thinking",
+        variable=checkbox_show_thinking,
+        style='Custom.TCheckbutton'
+    )
+    chk_show_thinking.pack(anchor='center', pady=2)
+
+    # --- Temperature slider ---
+    # Use the globally loaded config and temp_var
+    temp_var.set(config['models']['llm']['sampler_params']['temp'])
+    label_temperature = ttk.Label(settings_frame, text=f"Temperature: {temp_var.get():.2f}", style='TLabel')
+    label_temperature.pack(anchor='center')
+
+    slider_temperature = ttk.Scale(
+        settings_frame,
+        from_=0.0,
+        to=1.0,
+        orient=tk.HORIZONTAL,
+        variable=temp_var,
+        length=150,
+        command=update_temp
+    )
+    slider_temperature.pack(anchor='center', pady=(0,10))
+
+    system_prompt_edit_btn = ttk.Button(
+        settings_frame,
+        text="Edit system prompt",
+        command=open_system_prompt,
+        style="SPrompt.TButton",
+        cursor="hand2"
+    )
+    system_prompt_edit_btn.pack(anchor='center', pady=(4,8))
 
 # === CONFIGURATION DE L'INTERFACE ===
 root.title("LLM Assistant")
@@ -306,10 +398,22 @@ style_config = {
         'font': ('Segoe UI', 11),
         'padding': 2
     },
+    'Reset.TButton': {
+        'background': '#A52A2A',      
+        'foreground': 'white',
+        'font': ('Segoe UI', 11, 'bold'),
+        'padding': 2
+    },
+    'SPrompt.TButton': {
+        'background': '#599258',      
+        'foreground': 'white',
+        'font': ('Segoe UI', 11, 'bold'),
+        'padding': 2
+    },
     'Blue.TLabel': {
         'background': '#323232',
         'foreground': '#599258',
-        'font': ('Segoe UI', 10, 'italic underline'),
+        'font': ('Segoe UI', 11, 'italic underline'),
         'padding': 0
     },
     'TLabel': {
@@ -372,6 +476,10 @@ style.map("TNotebook.Tab",
           background=[("selected", "#323232"), ("active", "#2a2a2a")],
           foreground=[("selected", "white"), ("active", "white")])
 
+style.map('SPrompt.TButton',
+          background=[('active', '#457a3a'), ('pressed', '#2e4a20')],
+          foreground=[('disabled', '#d9d9d9')])
+
 style.map('Bottom.TButton',
           background=[('active', '#457a3a'), ('pressed', '#2e4a20')],
           foreground=[('disabled', '#d9d9d9')])
@@ -379,6 +487,10 @@ style.map('Bottom.TButton',
 style.map('TCheckbutton',
           background=[('active', '#323232'), ('pressed', '#323232')],
           foreground=[('active', 'white'), ('pressed', 'white')])
+
+style.map("Reset.TButton",
+          background=[('active', '#5C0000'), ('pressed', '#3E0000')],
+          foreground=[('disabled', '#d9d9d9')])
 
 # === WIDGETS PRINCIPAUX ===
 main_frame = ttk.Frame(root, padding=10, style='TFrame')

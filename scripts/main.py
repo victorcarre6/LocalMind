@@ -712,7 +712,7 @@ def show_infos(keywords_list=None, context_list=None):
         return ax
 
     if keywords_list and isinstance(keywords_list[0], KeywordsData):
-        fig, ax = plt.subplots(figsize=(10, 3.5), dpi=100)
+        fig, ax = plt.subplots(figsize=(10, 3.5), dpi=100, facecolor="#323232")
         plot_keywords_bar(ax, keywords_list, "Frequency, weight, and score from initial prompt keywords")
         fig.tight_layout()
         canvas1 = FigureCanvasTkAgg(fig, master=tab_keywords)
@@ -720,7 +720,7 @@ def show_infos(keywords_list=None, context_list=None):
         canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=False, padx=10, pady=(10, 0))
         plt.close(fig)
         if prompt_keywords and isinstance(prompt_keywords[0], KeywordsData):
-            fig2, ax2 = plt.subplots(figsize=(10, 4), dpi=100)
+            fig2, ax2 = plt.subplots(figsize=(10, 4), dpi=100, facecolor="#323232")
             plot_keywords_bar(ax2, prompt_keywords, "Frequency, weight, and score from generated prompt keywords")
             fig2.tight_layout()
             canvas2 = FigureCanvasTkAgg(fig2, master=tab_keywords)
