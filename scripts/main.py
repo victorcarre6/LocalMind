@@ -322,7 +322,7 @@ context_count_var = None
 keywords = None
 context = None
 
-def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0, instant_memory=True):
+def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0, instant_memory=True, similarity_threshold=0.6):
     global context, prompt
     pipeline = LanguagePipeline(user_input)
     lang = pipeline.lang
@@ -331,7 +331,8 @@ def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_li
         user_input, 
         limit=context_limit, 
         recall=recall, 
-        pipeline=pipeline)
+        pipeline=pipeline,
+        similarity_threshold=similarity_threshold)
     prompt = generate_prompt_paragraph(
         context, 
         user_input, 
@@ -391,7 +392,7 @@ def extract_keywords(text, top_n=5, pipeline=None):
         for score, freq, kw_lemma, weight in top_filtered
     ]
 
-def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
+def get_relevant_context(user_question, limit=3, recall=True, pipeline=None, similarity_threshold=0.6):
     global embedding_model, faiss_index, keyword_count_var, keywords
     if not recall:
         return []
@@ -487,6 +488,7 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None):
 
     # === 7. Tri final par score combiné ===
     filtered_context.sort(key=lambda x: x.combined_score, reverse=True)
+    filtered_context = [ctx for ctx in filtered_context if ctx.combined_score >= similarity_threshold]
     return filtered_context[:limit]
 
 def get_last_conversations_with_summary(limit=3):
@@ -527,8 +529,9 @@ def summarize(text, focus_terms=None, max_length=50):
 
 def generate_prompt_paragraph(context, question, keywords=None, lang=None, history_limit=0, instant_memory=True):
     global context_count
+    
     if not context:
-        return f"<|im_start|>user\n{question} <|im_end|>\n<|im_start|>assistant"
+        return f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant"
 
     limit = context_count_var.get() if 'context_count_var' in globals() else 5
 
@@ -557,14 +560,14 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
                 print(f"Erreur traitement item : {e}")
                 continue
         if not processed_items:
-            return f"<|im_start|>user\n{question} <|im_end|>\n<|im_start|>assistant"
+            return f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant"
 
     parts = []
     parts.append('<|im_start|>system')
     parts.append("Réponds scientifiquement à QUESTION PRINCIPALE en utilisant le contexte fournit : priorise les DERNIERS ECHANGES, " \
     "utilise les ANCIENNES CONVERSATIONS uniquement pour exemples ou contexte secondaire SI ILS ONT UN RAPPORT AVEC QUESTION PRINCIPALE. " \
     "Ne répète pas les informations déjà mentionnées, surtout celles présentes dans DERNIERS ECHANGES. " \
-    "Rédige des réponses complètes, claires et concises. <|im_end|>" + system_prompt)
+    "Rédige des réponses complètes, claires et concises." + system_prompt + "<|im_end|>")
 
     if processed_items:
         parts.append("\n### ANCIENNES CONVERSATIONS (contexte secondaire) ###")
@@ -761,7 +764,7 @@ def show_infos(keywords_list=None, context_list=None):
     text_widget.tag_configure("user_input", foreground="#599258", font=("Segoe UI", 11, "bold"))
     text_widget.tag_configure("assistant_label", foreground="#CECABF", font=("Segoe UI", 11, "bold"))
     text_widget.tag_configure("assistant_output", foreground="#CECABF", font=("Segoe UI", 11))
-    text_widget.tag_configure("score", foreground="white", font=("Segoe UI", 10))
+    text_widget.tag_configure("score", foreground="#599258", font=("Segoe UI", 10))
     if context_list:
         for idx, ctx in enumerate(context_list, 1):
             user_input = getattr(ctx, "user_input", "")

@@ -43,29 +43,79 @@ llm_conf = config.get("models", {}).get("llm", {})
 
 keyword_count_var = tk.IntVar(value=memory_conf.get("keyword_count", 10))
 context_count_var = tk.IntVar(value=memory_conf.get("context_count", 5))
+instant_memory_count_var = tk.IntVar(value=memory_conf.get("instant_memory_count", 3))
 checkbox_thinking = tk.BooleanVar(value=llm_conf.get("enable_thinking", False))
 checkbox_show_thinking = tk.BooleanVar(value=llm_conf.get("show_thinking", False))
 checkbox_memory_recall = tk.BooleanVar(value=memory_conf.get("memory_recall", True))
 checkbox_instant_memory = tk.BooleanVar(value=memory_conf.get("instant_memory", True))
+threshold_count_var = tk.DoubleVar(value=memory_conf.get("similarity_score_threshold", 0.6))
+temp_var = tk.DoubleVar(value=memory_conf.get("sampler_params", {}).get("temp", 0.75))
 
-# --- Auto-save changes to config.json when variables change ---
+def reset_to_defaults():
+    global memory_conf, llm_conf
+
+    # Valeurs par défaut des variables
+    DEFAULTS = {
+        "keyword_count": 5,
+        "context_count": 3,
+        "memory_recall": True,
+        "instant_memory": True,
+        "instant_memory_count": 3,
+        "similarity_score_threshold": 0.6,
+        "enable_thinking": False,
+        "show_thinking": False,
+        "temp": 0.75,
+    }
+
+    # Appliquer les valeurs par défaut aux variables dans le config.json
+    keyword_count_var.set(DEFAULTS["keyword_count"])
+    context_count_var.set(DEFAULTS["context_count"])
+    instant_memory_count_var.set(DEFAULTS["instant_memory_count"])
+    checkbox_memory_recall.set(DEFAULTS["memory_recall"])
+    checkbox_instant_memory.set(DEFAULTS["instant_memory"])
+    threshold_count_var.set(DEFAULTS["similarity_score_threshold"])
+    checkbox_thinking.set(DEFAULTS["enable_thinking"])
+    checkbox_show_thinking.set(DEFAULTS["show_thinking"])
+    temp_var.set(DEFAULTS["temp"])
+
+    # Recharger et appliquer les valeurs du fichier de config
+    keyword_count_var.set(memory_conf.get("keyword_count", 5))
+    context_count_var.set(memory_conf.get("context_count", 3))
+    instant_memory_count_var.set(memory_conf.get("instant_memory_count", 3))
+    checkbox_memory_recall.set(memory_conf.get("memory_recall", True))
+    checkbox_instant_memory.set(memory_conf.get("instant_memory", True))
+    threshold_count_var.set(memory_conf.get("similarity_score_threshold", 0.6))
+    checkbox_thinking.set(llm_conf.get("enable_thinking", False))
+    checkbox_show_thinking.set(llm_conf.get("show_thinking", False))
+    temp_val = llm_conf.get("sampler_params", {}).get("temp", 0.75)
+    temp_var.set(temp_val)
+
+    update_status("Settings reset to defaults.", success=True)
+
 def save_gui_config(*args):
     config["memory_parameters"]["keyword_count"] = keyword_count_var.get()
     config["memory_parameters"]["context_count"] = context_count_var.get()
+    config["memory_parameters"]["instant_memory_count"] = instant_memory_count_var.get()
     config["memory_parameters"]["memory_recall"] = checkbox_memory_recall.get()
     config["memory_parameters"]["instant_memory"] = checkbox_instant_memory.get()
+    config["memory_parameters"]["similarity_score_threshold"] = round(threshold_count_var.get(), 2)
+    config["models"]["llm"]["sampler_params"]["temp"] = round(temp_var.get(), 2)
     config["models"]["llm"]["enable_thinking"] = checkbox_thinking.get()
     config["models"]["llm"]["show_thinking"] = checkbox_show_thinking.get()
     with open(expand_path(CONFIG_PATH), "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
+
+# --- Auto-save changes to config.json when variables change ---
 keyword_count_var.trace_add("write", save_gui_config)
 context_count_var.trace_add("write", save_gui_config)
+instant_memory_count_var.trace_add("write", save_gui_config)
 checkbox_thinking.trace_add("write", save_gui_config)
 checkbox_show_thinking.trace_add("write", save_gui_config)
 checkbox_memory_recall.trace_add("write", save_gui_config)
 checkbox_instant_memory.trace_add("write", save_gui_config)
-temp_var = tk.DoubleVar(value=config['models']['llm']['sampler_params']['temp'])
+threshold_count_var.trace_add("write", save_gui_config)
+temp_var.trace_add("write", save_gui_config)
 label_temperature = None
 sys_prompt = tk.DoubleVar(value=config['models']['llm']['system_prompt'])
 
@@ -81,17 +131,20 @@ def preload_models_and_update_status():
     except Exception as e:
         label_status.config(text=f"Error loading models: {e}", foreground="#ff6b6b")
 
-def on_generate(event=None):
+def on_generate():
     global conversation_counter
 
     start_on_generate = time.time()
 
     user_input = entry_question.get("1.0", tk.END).strip()
-    history_limit = min(conversation_counter, 3)
+    instant_memory_count = instant_memory_count_var.get()
     context_count = context_count_var.get()
     keyword_count = keyword_count_var.get()
     memory_recall = checkbox_memory_recall.get()
     instant_memory = checkbox_instant_memory.get()
+    similarity_threshold = threshold_count_var.get()
+    instant_memory_count = instant_memory_count_var.get()
+    history_limit = min(conversation_counter, instant_memory_count)
 
     if not user_input:
         update_status("Please enter a question.", error=True)
@@ -109,7 +162,8 @@ def on_generate(event=None):
             keyword_count=keyword_count,
             recall=memory_recall,
             history_limit=history_limit,
-            instant_memory=instant_memory
+            instant_memory=instant_memory,
+            similarity_threshold=similarity_threshold
         )
         end_on_ask = time.time()
 
@@ -282,7 +336,7 @@ def open_settings():
     global temp_var, label_temperature
     settings_window = tk.Toplevel(root)
     settings_window.title("Settings")
-    settings_window.geometry("200x400")
+    settings_window.geometry("250x550")
     settings_window.configure(bg="#323232")
     settings_window.resizable(False, False)
 
@@ -301,23 +355,6 @@ def open_settings():
     )
     chk_memory_recall.pack(anchor='center', pady=2)
 
-    chk_instant_memory = ttk.Checkbutton(
-        settings_frame,
-        text="Short-term memory",
-        variable=checkbox_instant_memory,
-        style='Custom.TCheckbutton'
-    )
-    chk_instant_memory.pack(anchor='center', pady=2)
-
-    erase_btn = ttk.Button(
-        settings_frame,
-        text="Reset short-term memory",
-        command=erase_short_term_memory,
-        style="Reset.TButton",
-        cursor="hand2"
-    )
-    erase_btn.pack(anchor='center', pady=(4,8))
-
     label_keyword_count = ttk.Label(settings_frame, text=f"Number of keywords: {keyword_count_var.get()}", style='TLabel')
     label_keyword_count.pack(anchor='center')
 
@@ -332,7 +369,7 @@ def open_settings():
     )
     slider_keywords.pack(anchor='center', pady=(0,5))
 
-    label_contexts_count = ttk.Label(settings_frame, text=f"Number of contexts: {context_count_var.get()}", style='TLabel')
+    label_contexts_count = ttk.Label(settings_frame, text=f"Long-term memory depth: {context_count_var.get()}", style='TLabel')
     label_contexts_count.pack(anchor='center')
 
     slider_contexts = ttk.Scale(
@@ -342,9 +379,58 @@ def open_settings():
         orient=tk.HORIZONTAL,
         variable=context_count_var,
         length=150,
-        command=lambda val: label_contexts_count.config(text=f"Number of contexts: {int(float(val))}")
+        command=lambda val: label_contexts_count.config(text=f"Long-term memory depth: {int(float(val))}")
     )
     slider_contexts.pack(anchor='center', pady=(0,10))
+
+    label_threshold_count = ttk.Label(settings_frame, text=f"Similarity threshold: {threshold_count_var.get():1}", style='TLabel')
+    label_threshold_count.pack(anchor='center')
+
+    slider_threshold = ttk.Scale(
+        settings_frame,
+        from_=0.0,
+        to=2.0,
+        orient=tk.HORIZONTAL,
+        variable=threshold_count_var,
+        length=150,
+        command=lambda val: label_threshold_count.config(text=f"Similarity threshold: {float(val):.1f}")
+    )
+    slider_threshold.pack(anchor='center', pady=(0,10))
+
+    # Vertical spacing
+    spacer = ttk.Label(settings_frame, text="")
+    spacer.pack(pady=(6,0))
+
+    label_instant_memory_count = ttk.Label(settings_frame, text=f"Short-term memory depth: {instant_memory_count_var.get()}", style='TLabel')
+    label_instant_memory_count.pack(anchor='center')
+
+    chk_instant_memory = ttk.Checkbutton(
+        settings_frame,
+        text="Short-term memory",
+        variable=checkbox_instant_memory,
+        style='Custom.TCheckbutton'
+    )
+    chk_instant_memory.pack(anchor='center', pady=2)
+
+    slider_instant_memory = ttk.Scale(
+        settings_frame,
+        from_=1,
+        to=10,
+        orient=tk.HORIZONTAL,
+        variable=instant_memory_count_var,
+        length=150,
+        command=lambda val: label_instant_memory_count.config(text=f"Short-term memory depth: {int(float(val))}")
+    )
+    slider_instant_memory.pack(anchor='center', pady=(0,10))
+
+    erase_btn = ttk.Button(
+        settings_frame,
+        text="Reset short-term memory",
+        command=erase_short_term_memory,
+        style="Reset.TButton",
+        cursor="hand2"
+    )
+    erase_btn.pack(anchor='center', pady=(4,8))
 
     # Vertical spacing
     spacer = ttk.Label(settings_frame, text="")
@@ -370,9 +456,6 @@ def open_settings():
     )
     chk_show_thinking.pack(anchor='center', pady=2)
 
-    # --- Temperature slider ---
-    # Use the globally loaded config and temp_var
-    temp_var.set(config['models']['llm']['sampler_params']['temp'])
     label_temperature = ttk.Label(settings_frame, text=f"Temperature: {temp_var.get():.2f}", style='TLabel')
     label_temperature.pack(anchor='center')
 
@@ -383,7 +466,7 @@ def open_settings():
         orient=tk.HORIZONTAL,
         variable=temp_var,
         length=150,
-        command=update_temp
+        command=lambda val: update_temp(val)
     )
     slider_temperature.pack(anchor='center', pady=(0,10))
 
@@ -395,6 +478,15 @@ def open_settings():
         cursor="hand2"
     )
     system_prompt_edit_btn.pack(anchor='center', pady=(4,8))
+
+    reset_btn = ttk.Button(
+        settings_frame,
+        text="Reset settings to defaults",
+        command=reset_to_defaults,
+        style="ResetGrey.TButton",
+        cursor="hand2"
+    )
+    reset_btn.pack(anchor='center', pady=(4,8))
 
 # === CONFIGURATION DE L'INTERFACE ===
 root.title("LLM Assistant")
@@ -421,6 +513,12 @@ style_config = {
     },
     'Reset.TButton': {
         'background': '#A52A2A',      
+        'foreground': 'white',
+        'font': ('Segoe UI', 11, 'bold'),
+        'padding': 2
+    },
+    'ResetGrey.TButton': {
+        'background': "#A0A0A0",      
         'foreground': 'white',
         'font': ('Segoe UI', 11, 'bold'),
         'padding': 2
@@ -510,6 +608,10 @@ style.map('TCheckbutton',
           foreground=[('active', 'white'), ('pressed', 'white')])
 
 style.map("Reset.TButton",
+          background=[('active', '#5C0000'), ('pressed', '#3E0000')],
+          foreground=[('disabled', '#d9d9d9')])
+
+style.map("ResetGrey.TButton",
           background=[('active', '#5C0000'), ('pressed', '#3E0000')],
           foreground=[('disabled', '#d9d9d9')])
 
