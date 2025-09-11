@@ -50,6 +50,7 @@ checkbox_memory_recall = tk.BooleanVar(value=memory_conf.get("memory_recall", Tr
 checkbox_instant_memory = tk.BooleanVar(value=memory_conf.get("instant_memory", True))
 threshold_count_var = tk.DoubleVar(value=memory_conf.get("similarity_score_threshold", 0.6))
 temp_var = tk.DoubleVar(value=memory_conf.get("sampler_params", {}).get("temp", 0.75))
+system_prompt_var = tk.StringVar(value=llm_conf.get("system_prompt", ""))
 
 def reset_to_defaults():
     global memory_conf, llm_conf
@@ -117,7 +118,7 @@ checkbox_instant_memory.trace_add("write", save_gui_config)
 threshold_count_var.trace_add("write", save_gui_config)
 temp_var.trace_add("write", save_gui_config)
 label_temperature = None
-sys_prompt = tk.DoubleVar(value=config['models']['llm']['system_prompt'])
+
 
 main.set_gui_vars(keyword_count_var, context_count_var)
 
@@ -144,6 +145,7 @@ def on_generate():
     instant_memory = checkbox_instant_memory.get()
     similarity_threshold = threshold_count_var.get()
     instant_memory_count = instant_memory_count_var.get()
+    system_prompt = system_prompt_var.get()
     history_limit = min(conversation_counter, instant_memory_count)
 
     if not user_input:
@@ -163,7 +165,8 @@ def on_generate():
             recall=memory_recall,
             history_limit=history_limit,
             instant_memory=instant_memory,
-            similarity_threshold=similarity_threshold
+            similarity_threshold=similarity_threshold,
+            system_prompt=system_prompt
         )
         end_on_ask = time.time()
 
@@ -258,10 +261,8 @@ def open_system_prompt():
 
 
 def update_system_prompt(new_prompt: str):
-    """
-    Updates the system_prompt in config and saves it to config.json.
-    """
     config['models']['llm']['system_prompt'] = new_prompt
+    system_prompt_var.set(new_prompt)
     config_path = expand_path(CONFIG_PATH)
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)

@@ -322,7 +322,7 @@ context_count_var = None
 keywords = None
 context = None
 
-def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0, instant_memory=True, similarity_threshold=0.6):
+def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_limit=0, instant_memory=True, similarity_threshold=0.6, system_prompt=None):
     global context, prompt
     pipeline = LanguagePipeline(user_input)
     lang = pipeline.lang
@@ -332,13 +332,16 @@ def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_li
         limit=context_limit, 
         recall=recall, 
         pipeline=pipeline,
-        similarity_threshold=similarity_threshold)
+        similarity_threshold=similarity_threshold
+        )
     prompt = generate_prompt_paragraph(
         context, 
         user_input, 
         lang=lang, 
         history_limit=history_limit, 
-        instant_memory=instant_memory)
+        instant_memory=instant_memory,
+        system_prompt=system_prompt
+        )
     return prompt
 
 def extract_keywords(text, top_n=5, pipeline=None):
@@ -527,27 +530,26 @@ def summarize(text, focus_terms=None, max_length=50):
         summary = text[:max_length] + "... [résumé tronqué]"
         return summary
 
-def generate_prompt_paragraph(context, question, keywords=None, lang=None, history_limit=0, instant_memory=True):
+def generate_prompt_paragraph(context, question, keywords=None, lang=None, history_limit=0, instant_memory=True, system_prompt=None):
     global context_count
-    
-    if not context:
-        return f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant"
 
-    limit = context_count_var.get() if 'context_count_var' in globals() else 5
-
+    limit = context_count_var.get() if 'context_count_var' in globals() and context_count_var is not None else 5
+    # Récupération des contextes long-term (anciennes conversations)
     processed_items = []
-    for idx, item in enumerate(context[:limit], start=1):
-        try:
-            user_input = str(item.user_input)[:300]
-            summary = getattr(item, "llm_output_summary", None)
-            if summary is None:
-                summary = ""
-            processed_items.append((idx, user_input, summary))
-        except Exception as e:
-            print(f"Erreur traitement item : {e}")
-            continue
+    if context:
+        for idx, item in enumerate(context[:limit], start=1):
+            try:
+                user_input = str(item.user_input)[:300]
+                summary = getattr(item, "llm_output_summary", None)
+                if summary is None:
+                    summary = ""
+                processed_items.append((idx, user_input, summary))
+            except Exception as e:
+                print(f"Erreur traitement item : {e}")
+                continue
     context_count = len(processed_items)
 
+    # Récupération des derniers échanges (short-term memory)
     processed_last_convos = []
     if instant_memory:
         last_convos = get_last_conversations_with_summary(limit=history_limit)
@@ -559,32 +561,66 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
             except Exception as e:
                 print(f"Erreur traitement item : {e}")
                 continue
-        if not processed_items:
-            return f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant"
 
+    has_long = bool(processed_items)
+    has_short = bool(processed_last_convos)
     parts = []
-    parts.append('<|im_start|>system')
-    parts.append("Réponds scientifiquement à QUESTION PRINCIPALE en utilisant le contexte fournit : priorise les DERNIERS ECHANGES, " \
-    "utilise les ANCIENNES CONVERSATIONS uniquement pour exemples ou contexte secondaire SI ILS ONT UN RAPPORT AVEC QUESTION PRINCIPALE. " \
-    "Ne répète pas les informations déjà mentionnées, surtout celles présentes dans DERNIERS ECHANGES. " \
-    "Rédige des réponses complètes, claires et concises." + system_prompt + "<|im_end|>")
 
-    if processed_items:
-        parts.append("\n### ANCIENNES CONVERSATIONS (contexte secondaire) ###")
+    # Compose system prompt for each case
+    # system_prompt is always in English, as per instruction.
+    # Compose the system prompt part first, depending on memory situation:
+    if not has_long and not has_short:
+        # 1. Ni short-term ni long-term
+        sys_text = (
+            f"{system_prompt}\n"
+            "Very important: answer in the same language as used in the MAIN QUESTION."
+        )
+        parts.append(f"<|im_start|>system\n{sys_text}<|im_end|>")
+    elif has_long and not has_short:
+        # 2. Long-term seulement
+        sys_text = (
+            "You are a scientific assistant. Use the provided PAST CONVERSATIONS as secondary context only if they are relevant to the MAIN QUESTION. "
+            "Do not repeat information already mentioned. Write clear, concise, and complete answers.\n"
+            f"{system_prompt}\n"
+            "Remember: The provided PAST CONVERSATIONS are only for secondary context or examples. Prioritize answering the MAIN QUESTION."
+        )
+        parts.append(f"<|im_start|>system\n{sys_text}<|im_end|>")
+    elif not has_long and has_short:
+        # 3. Short-term seulement
+        sys_text = (
+            "You are a scientific assistant. Use the provided RECENT EXCHANGES (chronological order, most recent last) as your main context. "
+            "Do not repeat information already present in the RECENT EXCHANGES. Write clear, concise, and complete answers.\n"
+            f"{system_prompt}\n"
+            "Remember: Focus on the RECENT EXCHANGES for context. Answer the MAIN QUESTION accordingly."
+        )
+        parts.append(f"<|im_start|>system\n{sys_text}<|im_end|>")
+    else:
+        # 4. Les deux présents
+        sys_text = (
+            "You are a scientific assistant. Use the RECENT EXCHANGES (main context, most recent last) as your primary source, "
+            "and use PAST CONVERSATIONS only for secondary context or examples IF they are relevant to the MAIN QUESTION. "
+            "Do not repeat information already present in the RECENT EXCHANGES. Write clear, concise, and complete answers.\n"
+            f"{system_prompt}\n"
+            "Remember: Prioritize the RECENT EXCHANGES, and only use PAST CONVERSATIONS for additional, relevant context."
+        )
+        parts.append(f"<|im_start|>system\n{sys_text}<|im_end|>")
+
+    # Now, build the rest of the prompt (contexts and question) as before.
+    # Add context sections depending on what is present:
+    if has_long:
+        parts.append("\n### PAST CONVERSATIONS (secondary context) ###")
         for idx, q, a in processed_items:
             parts.append(f"<|im_start|>user\n{q}<|im_end|>")
             parts.append(f"<|im_start|>assistant\n{a}<|im_end|>")
-
-    if processed_last_convos:
-        parts.append("\n### DERNIERS ECHANGES (prioritaires, par ordre chronologique) ###")
+    if has_short:
+        parts.append("\n### RECENT EXCHANGES (main context, chronological order) ###")
         for idx, user_input_short, last_output_summary in processed_last_convos:
             parts.append(f"<|im_start|>user\n{user_input_short}<|im_end|>")
             parts.append(f"<|im_start|>assistant\n{last_output_summary}<|im_end|>")
-
-    parts.append("\n### QUESTION PRINCIPALE ###")
+    # Always add the main question at the end
+    parts.append("\n### MAIN QUESTION ###")
     parts.append(f"<|im_start|>user\n{question} <|im_end|>")
     parts.append('<|im_start|>assistant')
-
     return "\n".join(parts)
 
 def insert_conversation_if_new(user_input, llm_output, llm_model, keyword_count=5, conversation_id=None):
