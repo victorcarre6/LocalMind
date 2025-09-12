@@ -94,7 +94,6 @@ with open(stopwords_path, "r", encoding="utf-8") as f:
 
 combined_stopwords = list(ENGLISH_STOP_WORDS.union(french_stop_words))
 
-# --- Connexion à la base SQLite ---
 db_path = config["data"]["db_path"]
 if not os.path.exists(db_path):
     default_db_path = os.path.join(os.path.dirname(db_path), "conversations_example.db")
@@ -105,6 +104,13 @@ if not os.path.exists(db_path):
 
 conn = sqlite3.connect(db_path)
 cur = conn.cursor()
+
+# === PROFILS ===
+# Variable globale pour le profil actif
+
+active_profile_name = "Default"
+# Liste locale des profils disponibles
+local_profiles = ["Default", "All"]
 
  # --- Initialisation de l'index vectoriel ---
 VECTOR_DIM = 384
@@ -125,7 +131,6 @@ def save_faiss_index(index):
 
 def load_models_in_background():
     global embedding_model, summarizing_pipeline, _SPACY_MODELS, _KEYBERT_MODELS, faiss_index
-    import time
     try:
         # Charger le modèle d'embedding
         embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -288,7 +293,8 @@ def init_db_connection(db_path: str):
             llm_model TEXT NOT NULL,
             llm_output TEXT NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            llm_output_summary TEXT
+            llm_output_summary TEXT,
+            profile_name TEXT DEFAULT 'Default'
         )
     ''')
     cur.execute('''
@@ -308,6 +314,7 @@ def init_db_connection(db_path: str):
             FOREIGN KEY(conversation_id) REFERENCES conversations(id)
         )
     ''')
+    # Suppression de la création de la table profiles
     conn.commit()
 
 def set_gui_vars(keyword_var, context_var):
@@ -328,20 +335,20 @@ def on_ask(user_input, context_limit=3, keyword_count=5, recall=True, history_li
     lang = pipeline.lang
 
     context = get_relevant_context(
-        user_input, 
-        limit=context_limit, 
-        recall=recall, 
+        user_input,
+        limit=context_limit,
+        recall=recall,
         pipeline=pipeline,
         similarity_threshold=similarity_threshold
-        )
+    )
     prompt = generate_prompt_paragraph(
-        context, 
-        user_input, 
-        lang=lang, 
-        history_limit=history_limit, 
+        context,
+        user_input,
+        lang=lang,
+        history_limit=history_limit,
         instant_memory=instant_memory,
         system_prompt=system_prompt
-        )
+    )
     return prompt
 
 def extract_keywords(text, top_n=5, pipeline=None):
@@ -396,7 +403,7 @@ def extract_keywords(text, top_n=5, pipeline=None):
     ]
 
 def get_relevant_context(user_question, limit=3, recall=True, pipeline=None, similarity_threshold=0.6):
-    global embedding_model, faiss_index, keyword_count_var, keywords
+    global embedding_model, faiss_index, keyword_count_var, keywords, active_profile_name
     if not recall:
         return []
 
@@ -451,11 +458,19 @@ def get_relevant_context(user_question, limit=3, recall=True, pipeline=None, sim
 
     # === 5. Récupération des conversations candidates ===
     placeholders_ids = ','.join(['?'] * len(matched_convo_ids))
-    cur.execute(f'''
-        SELECT user_input, llm_output, llm_model, timestamp, id, llm_output_summary
-        FROM conversations
-        WHERE id IN ({placeholders_ids})
-    ''', list(matched_convo_ids))
+    # Filtrer selon le profil actif sauf si "All"
+    if active_profile_name and active_profile_name != "All":
+        cur.execute(f'''
+            SELECT user_input, llm_output, llm_model, timestamp, id, llm_output_summary
+            FROM conversations
+            WHERE id IN ({placeholders_ids}) AND profile_name = ?
+        ''', list(matched_convo_ids) + [active_profile_name])
+    else:
+        cur.execute(f'''
+            SELECT user_input, llm_output, llm_model, timestamp, id, llm_output_summary
+            FROM conversations
+            WHERE id IN ({placeholders_ids})
+        ''', list(matched_convo_ids))
     context_rows = cur.fetchall()
     if not context_rows:
         return []
@@ -549,7 +564,7 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
                 continue
     context_count = len(processed_items)
 
-    # Récupération des derniers échanges (short-term memory)
+    # Récupération des derniers échanges (short-term memory) uniquement si non-éphémère
     processed_last_convos = []
     if instant_memory:
         last_convos = get_last_conversations_with_summary(limit=history_limit)
@@ -624,7 +639,7 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
     return "\n".join(parts)
 
 def insert_conversation_if_new(user_input, llm_output, llm_model, keyword_count=5, conversation_id=None):
-    global embedding_model, faiss_index
+    global embedding_model, faiss_index, active_profile_name
     if cur is None:
         raise ValueError("La base de données n'est pas initialisée.")
 
@@ -643,10 +658,14 @@ def insert_conversation_if_new(user_input, llm_output, llm_model, keyword_count=
     vector = embedding_model.encode([user_input], convert_to_tensor=False)[0].astype('float32')
     faiss.normalize_L2(vector.reshape(1, -1))
 
-    # Insertion de la conversation (pour obtenir l'ID tout de suite)
+    # Utiliser "Default" si le profil actif est "All", None ou vide
+    profile_for_insert = active_profile_name
+    if not profile_for_insert or profile_for_insert == "All":
+        profile_for_insert = "Default"
+    # Insertion de la conversation (avec profil)
     cur.execute(
-        "INSERT INTO conversations (user_input, llm_output, llm_model, timestamp, llm_output_summary) VALUES (?, ?, ?, ?, ?)",
-        (user_input, llm_output, llm_model, now, None)
+        "INSERT INTO conversations (user_input, llm_output, llm_model, timestamp, llm_output_summary, profile_name) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_input, llm_output, llm_model, now, None, profile_for_insert)
     )
     conversation_id = cur.lastrowid
 
@@ -702,6 +721,83 @@ def insert_conversation_if_new(user_input, llm_output, llm_model, keyword_count=
     kw_thread.join()
 
     return True
+
+
+# === PROFILS : Gestion via base de données ===
+
+def get_all_profiles():
+    """Retourne la liste fusionnée des profils locaux et de ceux présents dans la base."""
+    global local_profiles
+    cur.execute("SELECT DISTINCT profile_name FROM conversations")
+    db_profiles = [row[0] for row in cur.fetchall() if row[0]]
+
+    all_profiles = set(local_profiles) | set(db_profiles)
+
+    # Toujours forcer l’ordre avec Default et All en tête
+    ordered = ["Default", "All"] + sorted(p for p in all_profiles if p not in ("Default", "All"))
+    return ordered
+
+def add_profile(name: str):
+    """Ajoute un nouveau profil dans la liste locale s’il n’existe pas déjà."""
+    global local_profiles
+    name = name.strip()
+    if not name or name in ("Default", "All"):
+        return
+    if name not in local_profiles:
+        local_profiles.append(name)
+
+def edit_profile(old_name: str, new_name: str):
+    """Renomme un profil dans la liste locale et dans la base de données."""
+    global local_profiles
+    if old_name in ("Default", "All") or old_name not in get_all_profiles():
+        raise ValueError("Profil invalide.")
+    if new_name in ("Default", "All") or new_name in get_all_profiles():
+        raise ValueError("Nom de profil déjà utilisé.")
+
+    # Mettre à jour la liste locale
+    if old_name in local_profiles:
+        local_profiles[local_profiles.index(old_name)] = new_name
+
+    # Mettre à jour la base
+    cur.execute("UPDATE conversations SET profile_name = ? WHERE profile_name = ?", (new_name, old_name))
+    conn.commit()
+
+def delete_profile(name: str):
+    """
+    Supprime un profil et toutes les conversations associées dans la base.
+    Si le profil est "Default" ou "All", ne supprime que les conversations associées,
+    mais laisse le profil dans la liste locale.
+    """
+    global local_profiles
+    all_profiles = get_all_profiles()
+    if name not in all_profiles:
+        raise ValueError("Profil inexistant.")
+
+    # Supprime seulement les conversations, pas le profil de la liste
+    if name in ("Default", "All"):
+        cur.execute("SELECT id FROM conversations WHERE profile_name = ?", (name,))
+        convo_ids = [row[0] for row in cur.fetchall()]
+        if convo_ids:
+            placeholders = ",".join("?" for _ in convo_ids)
+            cur.execute(f"DELETE FROM vectors WHERE conversation_id IN ({placeholders})", convo_ids)
+            cur.execute(f"DELETE FROM conversation_vectors WHERE conversation_id IN ({placeholders})", convo_ids)
+            cur.execute(f"DELETE FROM conversations WHERE id IN ({placeholders})", convo_ids)
+        conn.commit()
+        # Ne retire pas le profil de local_profiles
+        return
+
+    # Sinon, suppression normale (conversations + profil local)
+    if name in local_profiles:
+        local_profiles.remove(name)
+
+    cur.execute("SELECT id FROM conversations WHERE profile_name = ?", (name,))
+    convo_ids = [row[0] for row in cur.fetchall()]
+    if convo_ids:
+        placeholders = ",".join("?" for _ in convo_ids)
+        cur.execute(f"DELETE FROM vectors WHERE conversation_id IN ({placeholders})", convo_ids)
+        cur.execute(f"DELETE FROM conversation_vectors WHERE conversation_id IN ({placeholders})", convo_ids)
+        cur.execute(f"DELETE FROM conversations WHERE id IN ({placeholders})", convo_ids)
+    conn.commit()
 
 # === FONCTIONS TERTIAIRES ===
 

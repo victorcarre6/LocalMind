@@ -24,3 +24,4 @@ setuptools
 wheel
 python-Levenshtein
 easy_llama
+docling

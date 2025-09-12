@@ -11,8 +11,8 @@
 - **Advanced Memorization**  
   - Automatic saving of conversations in a SQLite database.  
   - Clear distinction between:
-    - **RECENT EXCHANGES** → flash memory, last exchanges between user and assistant. Prioritized in responses.  
-    - **OLDER CONVERSATIONS** → long-term memory, used as secondary context or examples.  
+    - **Short-term memory** → last exchanges between user and assistant. Prioritized in responses.  
+    - **Long-term memory** → long-term memory, used as secondary context or examples.  
   - Direct storage in the database of a **compressed summary** (`llm_output_summary`) to speed up prompt generation.  
   - Vector search with **FAISS** and keyword filtering.
 

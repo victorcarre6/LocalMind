@@ -64,7 +64,7 @@ def add_no_think(prompt: str) -> str:
         prompt = prompt[:start] + " /no_think" + prompt[start:]
     return prompt
 
-def generate_response(user_input: str, input_text: str, enable_thinking: bool, show_thinking: bool) -> str:
+def generate_response(user_input: str, input_text: str, enable_thinking: bool, show_thinking: bool, ephemeral_mode: bool) -> str:
     if not enable_thinking and "/no_think" not in input_text:
         input_text = add_no_think(input_text)
     start_generate = time.time()
@@ -85,7 +85,8 @@ def generate_response(user_input: str, input_text: str, enable_thinking: bool, s
     # Insert directement dans la base SQL
     start_sync = time.time()
     init_db_connection(db_path)
-    insert_conversation_if_new(user_input, clean_response, model_path.name)
+    if not ephemeral_mode:
+        insert_conversation_if_new(user_input, clean_response, model_path.name)
     end_sync = time.time()
     print(f"Échange ajouté à la base de donnée en {end_sync - start_sync:.1f} s.")
     if not show_thinking:

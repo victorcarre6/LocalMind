@@ -5,7 +5,7 @@ import time
 import json
 import os
 from pathlib import Path
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, messagebox
 import webbrowser
 from llm_executor import generate_response
 import main
@@ -31,9 +31,9 @@ def load_config(config_path):
 
 CONFIG_PATH = PROJECT_ROOT / "resources" / "config.json"
 config = load_config(CONFIG_PATH)
+main.init_db_connection(main.db_path)
 
-
-# === Fonctions principale ===
+# === Récupération des variables ===
 
 root = tk.Tk()
 
@@ -51,8 +51,9 @@ checkbox_instant_memory = tk.BooleanVar(value=memory_conf.get("instant_memory", 
 threshold_count_var = tk.DoubleVar(value=memory_conf.get("similarity_score_threshold", 0.6))
 temp_var = tk.DoubleVar(value=memory_conf.get("sampler_params", {}).get("temp", 0.75))
 system_prompt_var = tk.StringVar(value=llm_conf.get("system_prompt", ""))
+checkbox_ephemeral_mode = tk.BooleanVar(value=False)
 
-def reset_to_defaults():
+def reset_to_defaults(settings_window=None):
     global memory_conf, llm_conf
 
     # Valeurs par défaut des variables
@@ -79,19 +80,10 @@ def reset_to_defaults():
     checkbox_show_thinking.set(DEFAULTS["show_thinking"])
     temp_var.set(DEFAULTS["temp"])
 
-    # Recharger et appliquer les valeurs du fichier de config
-    keyword_count_var.set(memory_conf.get("keyword_count", 5))
-    context_count_var.set(memory_conf.get("context_count", 3))
-    instant_memory_count_var.set(memory_conf.get("instant_memory_count", 3))
-    checkbox_memory_recall.set(memory_conf.get("memory_recall", True))
-    checkbox_instant_memory.set(memory_conf.get("instant_memory", True))
-    threshold_count_var.set(memory_conf.get("similarity_score_threshold", 0.6))
-    checkbox_thinking.set(llm_conf.get("enable_thinking", False))
-    checkbox_show_thinking.set(llm_conf.get("show_thinking", False))
-    temp_val = llm_conf.get("sampler_params", {}).get("temp", 0.75)
-    temp_var.set(temp_val)
-
     update_status("Settings reset to defaults.", success=True)
+
+    if settings_window is not None:
+        settings_window.destroy()
 
 def save_gui_config(*args):
     config["memory_parameters"]["keyword_count"] = keyword_count_var.get()
@@ -184,12 +176,14 @@ def on_generate():
             user_input,
             final_prompt,
             enable_thinking=checkbox_thinking.get(),
-            show_thinking=checkbox_show_thinking.get()
+            show_thinking=checkbox_show_thinking.get(),
+            ephemeral_mode=checkbox_ephemeral_mode.get()
         )
         end_generate = time.time()
         print(f"Durée totale de l'échange : {end_generate - start_on_generate:.2f} s")
         
-        conversation_counter += 1
+        if not checkbox_ephemeral_mode.get():
+            conversation_counter += 1
 
         # Insert user message in chat history
         chat_history.config(state=tk.NORMAL)
@@ -267,6 +261,208 @@ def update_system_prompt(new_prompt: str):
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
+# === PROFILS : Gestion des profils utilisateur ===
+def open_profiles_menu():
+    profiles_window = tk.Toplevel(root)
+    profiles_window.title("Profiles")
+    profiles_window.geometry("225x175")
+    profiles_window.configure(bg="#323232")
+    profiles_window.resizable(False, False)
+
+    # Frame principal
+    main_frame = ttk.Frame(profiles_window, padding=10, style="TFrame")
+    main_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Listbox pour les profils
+    listbox_frame = tk.Frame(main_frame, bg="#323232")
+    listbox_frame.pack(fill=tk.X, expand=False, pady=(5, 0))
+
+    profiles_listbox = tk.Listbox(listbox_frame, font=('Segoe UI', 13), selectmode=tk.SINGLE, bg="#1E1E1E", fg="white", bd=0, highlightthickness=1, selectbackground="#599258", selectforeground="white", height=6)
+    profiles_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=profiles_listbox.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    profiles_listbox.config(yscrollcommand=scrollbar.set)
+
+    # Charger les profils et peupler la Listbox
+    def refresh_profiles_listbox(selected_name=None):
+        """Remplit la Listbox avec la liste complète des profils."""
+        profiles_listbox.delete(0, tk.END)
+        all_profiles = main.get_all_profiles()
+        for name in all_profiles:
+            profiles_listbox.insert(tk.END, name)
+        # Sélectionner le profil actif si possible
+        current = selected_name if selected_name is not None else getattr(main, "active_profile_name", "Default")
+        try:
+            idx = all_profiles.index(current)
+            profiles_listbox.selection_set(idx)
+            profiles_listbox.see(idx)
+        except ValueError:
+            profiles_listbox.selection_set(0)
+
+    refresh_profiles_listbox()
+
+    # --- Boutons ---
+    btns_frame = ttk.Frame(main_frame, style="TFrame")
+    btns_frame.pack(fill=tk.X, pady=(10, 0))
+
+    def get_selected_profile():
+        try:
+            idx = profiles_listbox.curselection()
+            if not idx:
+                return None
+            return profiles_listbox.get(idx[0])
+        except Exception:
+            return None
+
+    def on_add():
+        # Custom Toplevel for adding a profile
+        add_win = tk.Toplevel(profiles_window)
+        add_win.title("Add Profile")
+        add_win.configure(bg="#323232")
+        add_win.resizable(False, False)
+        add_win.transient(profiles_window)
+        add_win.grab_set()
+
+        add_frame = ttk.Frame(add_win, padding=15, style="TFrame")
+        add_frame.pack(fill=tk.BOTH, expand=True)
+
+        label = ttk.Label(add_frame, text="Enter new profile name:", style="TLabel")
+        label.pack(anchor="center", pady=(0, 8))
+
+        entry_var = tk.StringVar()
+        entry = tk.Entry(add_frame, textvariable=entry_var, font=('Segoe UI', 13), width=24, bg="#323232", fg="white", insertbackground="white")
+        entry.pack(fill=tk.X, pady=(0, 8))
+        entry.focus_set()
+
+        btns = ttk.Frame(add_frame, style="TFrame")
+        btns.pack(fill=tk.X, pady=(5, 0))
+
+        def do_add():
+            name = entry_var.get().strip()
+            if not name:
+                return
+            if name in ("Default", "All"):
+                messagebox.showerror("Error", "Profile name already used.", parent=add_win)
+                return
+            all_names = [profiles_listbox.get(i) for i in range(profiles_listbox.size())]
+            if name in all_names:
+                messagebox.showerror("Error", "Profile already exists.", parent=add_win)
+                return
+            main.add_profile(name)
+            refresh_profiles_listbox(selected_name=name)
+            add_win.destroy()
+
+        def do_cancel():
+            add_win.destroy()
+
+        btn_add_profile = ttk.Button(btns, text="Add", command=do_add, style="Bottom.TButton", width=8)
+        btn_add_profile.pack(side=tk.LEFT, padx=(0, 5))
+        btn_cancel = ttk.Button(btns, text="Cancel", command=do_cancel, style="Bottom.TButton", width=8)
+        btn_cancel.pack(side=tk.LEFT)
+
+        add_win.bind("<Return>", lambda e: do_add())
+        add_win.bind("<Escape>", lambda e: do_cancel())
+
+    def on_edit():
+        sel = get_selected_profile()
+        if sel in ("Default", "All") or sel is None:
+            messagebox.showinfo("Edit", "Cannot edit reserved profile.")
+            return
+        # Custom Toplevel for editing a profile (styled like on_add)
+        edit_win = tk.Toplevel(profiles_window)
+        edit_win.title("Edit Profile")
+        edit_win.configure(bg="#323232")
+        edit_win.resizable(False, False)
+        edit_win.transient(profiles_window)
+        edit_win.grab_set()
+
+        edit_frame = ttk.Frame(edit_win, padding=15, style="TFrame")
+        edit_frame.pack(fill=tk.BOTH, expand=True)
+
+        label = ttk.Label(edit_frame, text="Edit profile name:", style="TLabel")
+        label.pack(anchor="center", pady=(0, 8))
+
+        entry_var = tk.StringVar(value=sel)
+        entry = tk.Entry(edit_frame, textvariable=entry_var, font=('Segoe UI', 13), width=24, bg="#323232", fg="white", insertbackground="white")
+        entry.pack(fill=tk.X, pady=(0, 8))
+        entry.focus_set()
+
+        btns = ttk.Frame(edit_frame, style="TFrame")
+        btns.pack(fill=tk.X, pady=(5, 0))
+
+        def do_save():
+            new_name = entry_var.get().strip()
+            if not new_name:
+                return
+            if new_name in ("Default", "All"):
+                messagebox.showerror("Error", "Invalid profile name.", parent=edit_win)
+                return
+            all_names = [profiles_listbox.get(i) for i in range(profiles_listbox.size())]
+            if new_name in all_names and new_name != sel:
+                messagebox.showerror("Error", "Profile already exists.", parent=edit_win)
+                return
+            main.edit_profile(sel, new_name)
+            refresh_profiles_listbox(selected_name=new_name)
+            edit_win.destroy()
+
+        def do_cancel():
+            edit_win.destroy()
+
+        btn_save = ttk.Button(btns, text="Save", command=do_save, style="Bottom.TButton", width=8)
+        btn_save.pack(side=tk.LEFT, padx=(0, 5))
+        btn_cancel = ttk.Button(btns, text="Cancel", command=do_cancel, style="Bottom.TButton", width=8)
+        btn_cancel.pack(side=tk.LEFT)
+
+        edit_win.bind("<Return>", lambda e: do_save())
+        edit_win.bind("<Escape>", lambda e: do_cancel())
+
+    def on_delete():
+        sel = get_selected_profile()
+        if sel is None:
+            return
+        if sel in ("Default", "All"):
+            confirm = messagebox.askyesno(
+                "Delete Conversations",
+                f"Are you sure you want to delete '{sel}' and all its conversations? This cannot be undone. Note that '{sel}' is a placeholder profile and cannot be deleted."
+            )
+            if confirm:
+                main.delete_profile(sel)
+                refresh_profiles_listbox(selected_name="Default")
+            return
+        confirm = messagebox.askyesno("Delete Profile", f"Are you sure you want to delete '{sel}' and all its conversations? This cannot be undone.")
+        if confirm:
+            main.delete_profile(sel)
+            refresh_profiles_listbox(selected_name="Default")
+
+    def on_ok():
+        sel = get_selected_profile()
+        if sel:
+            main.active_profile_name = sel
+        profiles_window.destroy()
+
+    btn_add = ttk.Button(btns_frame, text="Add", command=on_add, style="Bottom.TButton", width=3)
+    btn_add.pack(side=tk.LEFT, padx=2)
+    btn_edit = ttk.Button(btns_frame, text="Edit", command=on_edit, style="Bottom.TButton", width=3)
+    btn_edit.pack(side=tk.LEFT, padx=2)
+    btn_delete = ttk.Button(btns_frame, text="Delete", command=on_delete, style="ResetGrey.TButton", width=5)
+    btn_delete.pack(side=tk.LEFT, padx=2)
+    btn_ok = ttk.Button(btns_frame, text="Select", command=on_ok, style="Bottom.TButton", width=5)
+    btn_ok.pack(side=tk.RIGHT, padx=2)
+
+    # Double-clic sélectionne et ferme
+    def on_double_click(event):
+        on_ok()
+    profiles_listbox.bind("<Double-1>", on_double_click)
+
+    # Touche entrée = Ok
+    profiles_window.bind("<Return>", lambda e: on_ok())
+    # Echap = fermer sans changer
+    profiles_window.bind("<Escape>", lambda e: profiles_window.destroy())
+
+    # Focus sur la liste
+    profiles_listbox.focus_set()
+
 # === Fonctions d'affichage ===
 
 def update_status(message, error=False, success=False):
@@ -337,7 +533,7 @@ def open_settings():
     global temp_var, label_temperature
     settings_window = tk.Toplevel(root)
     settings_window.title("Settings")
-    settings_window.geometry("250x550")
+    settings_window.geometry("250x610")
     settings_window.configure(bg="#323232")
     settings_window.resizable(False, False)
 
@@ -396,14 +592,19 @@ def open_settings():
         length=150,
         command=lambda val: label_threshold_count.config(text=f"Similarity threshold: {float(val):.1f}")
     )
-    slider_threshold.pack(anchor='center', pady=(0,10))
+    slider_threshold.pack(anchor='center', pady=(0,5))
+
+    chk_ephemeral_mode = ttk.Checkbutton(
+        settings_frame,
+        text="Ephemeral mode",
+        variable=checkbox_ephemeral_mode,
+        style='Custom.TCheckbutton'
+    )
+    chk_ephemeral_mode.pack(anchor='center', pady=(5,5))
 
     # Vertical spacing
     spacer = ttk.Label(settings_frame, text="")
     spacer.pack(pady=(6,0))
-
-    label_instant_memory_count = ttk.Label(settings_frame, text=f"Short-term memory depth: {instant_memory_count_var.get()}", style='TLabel')
-    label_instant_memory_count.pack(anchor='center')
 
     chk_instant_memory = ttk.Checkbutton(
         settings_frame,
@@ -412,6 +613,9 @@ def open_settings():
         style='Custom.TCheckbutton'
     )
     chk_instant_memory.pack(anchor='center', pady=2)
+
+    label_instant_memory_count = ttk.Label(settings_frame, text=f"Short-term memory depth: {instant_memory_count_var.get()}", style='TLabel')
+    label_instant_memory_count.pack(anchor='center')
 
     slider_instant_memory = ttk.Scale(
         settings_frame,
@@ -478,20 +682,20 @@ def open_settings():
         style="SPrompt.TButton",
         cursor="hand2"
     )
-    system_prompt_edit_btn.pack(anchor='center', pady=(4,8))
+    system_prompt_edit_btn.pack(anchor='center', pady=(4,15))
 
     reset_btn = ttk.Button(
         settings_frame,
         text="Reset settings to defaults",
-        command=reset_to_defaults,
+        command=lambda: reset_to_defaults(settings_window),
         style="ResetGrey.TButton",
         cursor="hand2"
     )
-    reset_btn.pack(anchor='center', pady=(4,8))
+    reset_btn.pack(anchor='center', pady=(15,8))
 
 # === CONFIGURATION DE L'INTERFACE ===
 root.title("LLM Assistant")
-root.geometry("800x750")
+root.geometry("550x600")
 root.configure(bg="#323232")
 
 # Style global unique
@@ -503,31 +707,31 @@ style_config = {
     'Green.TButton': {
         'background': '#599258',
         'foreground': 'white',
-        'font': ('Segoe UI', 13),
+        'font': ('Segoe UI', 12),
         'padding': 2
     },
     'Bottom.TButton': {
         'background': '#599258',
         'foreground': 'white',
-        'font': ('Segoe UI', 11),
+        'font': ('Segoe UI', 12),
         'padding': 2
     },
     'Reset.TButton': {
         'background': '#A52A2A',      
         'foreground': 'white',
-        'font': ('Segoe UI', 11, 'bold'),
+        'font': ('Segoe UI', 12, 'bold'),
         'padding': 2
     },
     'ResetGrey.TButton': {
         'background': "#A0A0A0",      
         'foreground': 'white',
-        'font': ('Segoe UI', 11, 'bold'),
+        'font': ('Segoe UI', 12, 'bold'),
         'padding': 2
     },
     'SPrompt.TButton': {
         'background': '#599258',      
         'foreground': 'white',
-        'font': ('Segoe UI', 11, 'bold'),
+        'font': ('Segoe UI', 12, 'bold'),
         'padding': 2
     },
     'Blue.TLabel': {
@@ -579,7 +783,7 @@ style_config = {
     'TCheckbutton': {
         'background': '#323232',
         'foreground': 'white',
-        'font': ('Segoe UI', 12),
+        'font': ('Segoe UI', 13),
         'focuscolor': '#323232',
         'indicatorcolor': '#599258'
     }
@@ -643,7 +847,7 @@ input_frame = tk.Frame(main_frame, bg="#323232")
 input_frame.pack(fill=tk.X, expand=False)
 
 # Reduce input width from 80 to 60
-entry_question = tk.Text(input_frame, height=4, width=60, wrap="word", font=('Segoe UI', 13))
+entry_question = tk.Text(input_frame, height=4, width=20, wrap="word", font=('Segoe UI', 13))
 entry_question.pack(side="left", fill="both", expand=True)
 
 # Scrollbar personnalisée for input text
@@ -656,21 +860,15 @@ style.configure("Vertical.TScrollbar",
                 arrowcolor='black',
                 relief='flat')
 
-# Place scrollbar to the left of the send button, but right of input
-scrollbar = ttk.Scrollbar(
-    input_frame,
-    orient="vertical",
-    command=entry_question.yview,
-    style="Vertical.TScrollbar"
-)
-scrollbar.pack(side="left", fill="y")
-entry_question.config(yscrollcommand=scrollbar.set)
+
 
 entry_question.bind("<Return>", lambda event: (on_generate(), "break"))
 
-# Send button with arrow "▲" to the right of scrollbar
+
+input_button_frame = tk.Frame(input_frame, bg="#323232")
+input_button_frame.pack(side="right", fill=tk.Y)
 btn_ask = ttk.Button(
-    input_frame,
+    input_button_frame,
     text="▲",
     command=on_generate,
     style='Green.TButton',
@@ -720,30 +918,39 @@ input_frame.bind(right_click_event, show_question_context_menu)
 main_frame.bind(right_click_event, show_chat_context_menu)
 
 
+#
 # === BARRE DE STATUT ET BOUTONS ===
+# Place buttons directly under input area, with Profiles/Settings left, More/Help right, and status below.
 status_buttons_frame = ttk.Frame(main_frame, style='TFrame')
 status_buttons_frame.pack(fill=tk.X, pady=(5, 2))
 
+# Left and right button frames
+left_buttons = ttk.Frame(status_buttons_frame, style='TFrame')
+left_buttons.pack(side=tk.LEFT, anchor='w')
+right_buttons = ttk.Frame(status_buttons_frame, style='TFrame')
+right_buttons.pack(side=tk.RIGHT, anchor='e')
+
+# Left: Profiles and Settings
+btn_profiles = ttk.Button(left_buttons, text="Profiles", command=open_profiles_menu, style='Bottom.TButton', width=8)
+btn_profiles.pack(side=tk.LEFT, padx=(0, 5))
+btn_settings = ttk.Button(left_buttons, text="Settings", command=open_settings, style='Bottom.TButton', width=8)
+btn_settings.pack(side=tk.LEFT, padx=(0, 5))
+
+# Right: More and Help
+btn_infos = ttk.Button(right_buttons, text="More", command=show_infos, style='Bottom.TButton', width=8)
+btn_infos.pack(side=tk.LEFT, padx=(0, 5))
+btn_help = ttk.Button(right_buttons, text="Help", style='Bottom.TButton', command=show_help, width=8)
+btn_help.pack(side=tk.LEFT, padx=(0, 0))
+
+# Status label below the buttons, spanning the full width
 label_status = ttk.Label(
-    status_buttons_frame,
+    main_frame,
     text="Ready",
     style='Status.TLabel',
     foreground='white',
     anchor='w'
 )
-label_status.pack(side=tk.LEFT, anchor='w')
-
-right_buttons = ttk.Frame(status_buttons_frame, style='TFrame')
-right_buttons.pack(side=tk.RIGHT, anchor='e')
-
-btn_settings = ttk.Button(right_buttons, text="Settings", command=open_settings, style='Bottom.TButton', width=8)
-btn_settings.pack(side=tk.LEFT, padx=(0, 5))
-
-btn_infos = ttk.Button(right_buttons, text="More", command=show_infos, style='Bottom.TButton', width=8)
-btn_infos.pack(side=tk.LEFT, padx=(0, 5))
-
-btn_help = ttk.Button(right_buttons, text="Help", style='Bottom.TButton', command=show_help, width=8)
-btn_help.pack(side=tk.LEFT, padx=(0, 0))
+label_status.pack(fill=tk.X, anchor='w', pady=(0, 2))
 
 
 # === FOOTER ===
