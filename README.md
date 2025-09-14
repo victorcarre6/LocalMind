@@ -4,6 +4,8 @@
   <img src="https://img.shields.io/github/stars/victorcarre6/llm-assistant?style=social" />
   <img src="https://img.shields.io/github/forks/victorcarre6/llm-assistant?style=social" />
   <img src="https://img.shields.io/github/license/victorcarre6/llm-assistant" />
+</p>
+<p align="center">
   <a href="https://ko-fi.com/victorcarre">
     <img src="https://ko-fi.com/img/githubbutton_sm.svg" />
   </a>
