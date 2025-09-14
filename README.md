@@ -1,21 +1,15 @@
-# LLM Assistant — A chat interface to discuss with local LLM with persistent memory
+# LocalMind — A chat interface to discuss with local models with persistent memory
 
 ![GitHub Repo stars](https://img.shields.io/github/stars/victorcarre6/llm-assistant?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/victorcarre6/llm-assistant?style=social)
-![GitHub issues](https://img.shields.io/github/issues/victorcarre6/llm-assistant)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/victorcarre6/llm-assistant)
-![GitHub last commit](https://img.shields.io/github/last-commit/victorcarre6/llm-assistant)
 ![License](https://img.shields.io/github/license/victorcarre6/llm-assistant)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/victorcarre)
 
-
-**LLM Assistant** is a chat interface allowing the use of local LLM with persistent memory, running fully offline for privacy.
+**LocalMind** is a chat interface allowing the use of local LLM with persistent memory, running fully offline for privacy.
 This project is an expansion of a previous project, [LLM Memorization](https://github.com/victorcarre6/llm-memorization), allowing automatic saves and summaries of your conversations in a local database, to provide relevant context in every chat. It is built on top of [easy-llama](https://github.com/ddh0/easy-llama), a lightweight Python backend that makes it seamless to interact with local models via llama.cpp.
 
-```markdown
-Comparison between memory and no memory
-```
+<img width="1198" height="706" alt="image" src="https://github.com/user-attachments/assets/d23b47da-7d5b-4f94-a332-caf2220083b0" />
 
 ---
 ## Features
@@ -28,20 +22,16 @@ The dual-memory architecture allows the assistant to deliver a contextually rich
   - Supports advanced retrieval methods including vector search and keyword filtering to access relevant long-term memories.
   - Conversations are automatically saved in the database.
 
-```markdown
-Mindmap memory system
-```
+<img width="1122" height="593" alt="image" src="https://github.com/user-attachments/assets/209896b7-8e25-4c49-b4ac-2236659e49bd" />
 
-
-### **Workflows**
+### **Workspaces**
 Context-specific memory management:
   - Each workflow represents a distinct context/project within the assistant, with its own long-term memory, maintaining relevant context for each specific use case.
   - Adding, editing, or deleting workflows directly affects the conversations stored in the database (specific memory can be shared or deleted).
   - Supports ephemeral mode, where conversations are not saved, for temporary testing or sensitive queries.
 
-```markdown
-Screenshot of profiles selection with examples
-```
+<img width="545" height="630" alt="image" src="https://github.com/user-attachments/assets/1dc7639a-0e56-4d4c-929d-36d366f85a24" />
+
 
 ### **Memory and model tuning**
 This assistant is designed to be fully customizable by the user.
@@ -50,9 +40,8 @@ This assistant is designed to be fully customizable by the user.
   - Enable or disable reasoning mode if the model used supports it, and choose to show the thinking block.
   - Configure model parameters directly from the settings menu for flexibility and experimentation.
 
-```markdown
-Screenshot of settings menu
-```
+<img width="545" height="680" alt="image" src="https://github.com/user-attachments/assets/72703ec0-77bb-4083-8254-5e42deb69bc0" />
+
 
 ### **Data visualization**
 Use the **Info** button to open a detailed window displaying:
@@ -63,9 +52,8 @@ Use the **Info** button to open a detailed window displaying:
   - Exchanges (`user_input` and `llm_output`) used as contexts, sorted by their `similarity_score`.
   - General information about your memory database.
 
-```markdown
-Screenshot of data visualization
-```
+<img width="1476" height="671" alt="image" src="https://github.com/user-attachments/assets/3120ec49-c2bd-45ee-93f6-12244c3a0b04" />
+
 
 ### **Choice of local LLM**
 Due to technical limitations, this project and its benchmark were developed using a small 0.6B parameter model (`Qwen3-0.6B`).
@@ -141,11 +129,12 @@ python scripts/gui.py
 
 ---
 
-## Contribution
+## Contribution and support
 
-This project has been made significantly easier thanks to [easy-llama](https://github.com/ddh0/easy-llama).
+This project has been made (tremendously!) easier thanks to [easy-llama](https://github.com/ddh0/easy-llama).
+
 Contributions are welcome! Feel free to reach out for issues or suggestions.
-And if you want to support my work :
+You can support my work on [ko-fi](https://ko-fi.com/victorcarre)
 
 ---
 ## 📜 License
