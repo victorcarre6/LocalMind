@@ -18,8 +18,7 @@
 <p align="center">
 <img width="1198" height="706" alt="image" src="https://github.com/user-attachments/assets/d23b47da-7d5b-4f94-a332-caf2220083b0" />
 </p>
-______
-
+---
 ## Features
 
 ### **Memory System**
