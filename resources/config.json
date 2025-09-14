@@ -1,0 +1,42 @@
+{
+  "environment": {
+    "venv_activate_path": ".venv/bin/activate",
+    "conversations_path": "datas/conversations"
+  },
+  "scripts": {
+    "sync_script_path": "scripts/memory_sync.py",
+    "llm_script_path": "scripts/llm_executor.py"
+  },
+  "data": {
+    "db_path": "datas/conversations.db",
+    "stopwords_file_path": "resources/stopwords_fr.json"
+  },
+  "models": {
+    "summarizing_model": "Falconsai/text_summarization",
+    "llm": {
+      "model_path": "/Users/victorcarre/Code/Projects/llm-assistant/resources/models/Qwen3-0.6B-Q5_K_M.gguf",
+      "sampler_params": {
+        "seed": 42,
+        "top_k": 20,
+        "top_p": 0.78,
+        "min_p": 0.16,
+        "temp": 0.75,
+        "penalty_last_n": 64,
+        "penalty_repeat": 1.1,
+        "mirostat": 0
+      },
+      "system_prompt": "",
+      "enable_thinking": false,
+      "show_thinking": false
+    }
+  },
+  "memory_parameters": {
+    "keyword_count": 5,
+    "keyword_multiplier": 2,
+    "context_count": 3,
+    "instant_memory_count": 3,
+    "similarity_score_threshold": 0.6,
+    "memory_recall": true,
+    "instant_memory": true
+  }
+}

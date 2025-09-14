@@ -200,7 +200,9 @@ cython_debug/
 
 # Spécifique à ce projet
 lab/
-resources/
+resources/llama.cpp/
+resources/models/
 datas/conversations_example_clean.db
 datas/conversations.db
-datas/conversations
+datas/conversations/
+libllama.sh

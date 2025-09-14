@@ -264,7 +264,7 @@ def update_system_prompt(new_prompt: str):
 # === PROFILS : Gestion des profils utilisateur ===
 def open_profiles_menu():
     profiles_window = tk.Toplevel(root)
-    profiles_window.title("Profiles")
+    profiles_window.title("Workspaces")
     profiles_window.geometry("225x175")
     profiles_window.configure(bg="#323232")
     profiles_window.resizable(False, False)
@@ -489,7 +489,7 @@ def show_help():
 
     title_label = tk.Label(
         frame,
-        text="LLM Assistant — Don't panic !",
+        text="LocalMind — Don't panic !",
         font=("Segoe UI", 12, "bold"),
         bg="#323232",
         fg="white",
@@ -499,11 +499,11 @@ def show_help():
 
     help_text = (
             "• Generate (▲): Ask a question and get an answer using the memory system.\n\n"
-            "• Profiles:\n"
-            "   - Default: General-purpose profile, used if none is selected.\n"
+            "• Workspaces:\n"
+            "   - Default: General-purpose workspace, used if none is selected.\n"
             "   - All: Uses the entire database memory.\n"
-            "   - Add: Create a new profile to compartmentalize memory.\n"
-            "   - Edit / Delete: Manage profiles. Deleting one permanently erases its memory!\n\n"
+            "   - Add: Create a new workspace to compartmentalize memory.\n"
+            "   - Edit / Delete: Manage workspaces. Deleting one permanently erases its memory!\n\n"
             "• Settings:\n"
             "   - Prompt processing:\n"
             "      • Long-term memory: Enable, adjust keyword count, depth, and similarity threshold.\n"
@@ -705,7 +705,7 @@ def open_settings():
     reset_btn.pack(anchor='center', pady=(15,8))
 
 # === CONFIGURATION DE L'INTERFACE ===
-root.title("LLM Assistant")
+root.title("LocalMind")
 root.geometry("550x600")
 root.configure(bg="#323232")
 
@@ -942,7 +942,7 @@ right_buttons = ttk.Frame(status_buttons_frame, style='TFrame')
 right_buttons.pack(side=tk.RIGHT, anchor='e')
 
 # Left: Profiles and Settings
-btn_profiles = ttk.Button(left_buttons, text="Profiles", command=open_profiles_menu, style='Bottom.TButton', width=8)
+btn_profiles = ttk.Button(left_buttons, text="Workspaces", command=open_profiles_menu, style='Bottom.TButton', width=10)
 btn_profiles.pack(side=tk.LEFT, padx=(0, 5))
 btn_settings = ttk.Button(left_buttons, text="Settings", command=open_settings, style='Bottom.TButton', width=8)
 btn_settings.pack(side=tk.LEFT, padx=(0, 5))
