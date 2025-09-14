@@ -12,12 +12,15 @@
 </p>
 
 > **LocalMind** is a chat interface allowing the use of local LLM with persistent memory, running fully offline for privacy.
+
 > This project is an expansion of a previous project, [LLM Memorization](https://github.com/victorcarre6/llm-memorization), allowing automatic saves and summaries of your conversations in a local database, to provide relevant context in every chat.
+
 > It is built on top of [easy-llama](https://github.com/ddh0/easy-llama), a lightweight Python backend that makes it seamless to interact with local models via llama.cpp.
 
 <p align="center">
 <img width="1198" height="706" alt="image" src="https://github.com/user-attachments/assets/d23b47da-7d5b-4f94-a332-caf2220083b0" />
 </p>
+
 ---
 ## Features
 
