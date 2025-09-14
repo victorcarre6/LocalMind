@@ -1,17 +1,23 @@
 # LocalMind — A chat interface to discuss with local models with persistent memory
 
-![GitHub Repo stars](https://img.shields.io/github/stars/victorcarre6/llm-assistant?style=social)
-![GitHub forks](https://img.shields.io/github/forks/victorcarre6/llm-assistant?style=social)
-![License](https://img.shields.io/github/license/victorcarre6/llm-assistant)
+<p align="center">
+  <img src="https://img.shields.io/github/stars/victorcarre6/llm-assistant?style=social" />
+  <img src="https://img.shields.io/github/forks/victorcarre6/llm-assistant?style=social" />
+  <img src="https://img.shields.io/github/license/victorcarre6/llm-assistant" />
+  <a href="https://ko-fi.com/victorcarre">
+    <img src="https://ko-fi.com/img/githubbutton_sm.svg" />
+  </a>
+</p>
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/victorcarre)
+> **LocalMind** is a chat interface allowing the use of local LLM with persistent memory, running fully offline for privacy.
+> This project is an expansion of a previous project, [LLM Memorization](https://github.com/victorcarre6/llm-memorization), allowing automatic saves and summaries of your conversations in a local database, to provide relevant context in every chat.
+> It is built on top of [easy-llama](https://github.com/ddh0/easy-llama), a lightweight Python backend that makes it seamless to interact with local models via llama.cpp.
 
-**LocalMind** is a chat interface allowing the use of local LLM with persistent memory, running fully offline for privacy.
-This project is an expansion of a previous project, [LLM Memorization](https://github.com/victorcarre6/llm-memorization), allowing automatic saves and summaries of your conversations in a local database, to provide relevant context in every chat. It is built on top of [easy-llama](https://github.com/ddh0/easy-llama), a lightweight Python backend that makes it seamless to interact with local models via llama.cpp.
-
+<p align="center">
 <img width="1198" height="706" alt="image" src="https://github.com/user-attachments/assets/d23b47da-7d5b-4f94-a332-caf2220083b0" />
+</p>
+______
 
----
 ## Features
 
 ### **Memory System**
@@ -22,7 +28,9 @@ The dual-memory architecture allows the assistant to deliver a contextually rich
   - Supports advanced retrieval methods including vector search and keyword filtering to access relevant long-term memories.
   - Conversations are automatically saved in the database.
 
+<p align="center">
 <img width="1122" height="593" alt="image" src="https://github.com/user-attachments/assets/209896b7-8e25-4c49-b4ac-2236659e49bd" />
+</p>
 
 ### **Workspaces**
 Context-specific memory management:
@@ -30,8 +38,9 @@ Context-specific memory management:
   - Adding, editing, or deleting workflows directly affects the conversations stored in the database (specific memory can be shared or deleted).
   - Supports ephemeral mode, where conversations are not saved, for temporary testing or sensitive queries.
 
+<p align="center">
 <img width="545" height="630" alt="image" src="https://github.com/user-attachments/assets/1dc7639a-0e56-4d4c-929d-36d366f85a24" />
-
+</p>
 
 ### **Memory and model tuning**
 This assistant is designed to be fully customizable by the user.
@@ -39,9 +48,11 @@ This assistant is designed to be fully customizable by the user.
   - Adjust the number and minimal relevance of long-term memory retrieved.
   - Enable or disable reasoning mode if the model used supports it, and choose to show the thinking block.
   - Configure model parameters directly from the settings menu for flexibility and experimentation.
+  - Swap the local model by editing the `model_path` in `resources/config.json`, making it easy to experiment with different `.gguf` models.
 
+<p align="center">
 <img width="545" height="680" alt="image" src="https://github.com/user-attachments/assets/72703ec0-77bb-4083-8254-5e42deb69bc0" />
-
+</p>
 
 ### **Data visualization**
 Use the **Info** button to open a detailed window displaying:
@@ -52,8 +63,9 @@ Use the **Info** button to open a detailed window displaying:
   - Exchanges (`user_input` and `llm_output`) used as contexts, sorted by their `similarity_score`.
   - General information about your memory database.
 
+<p align="center">
 <img width="1476" height="671" alt="image" src="https://github.com/user-attachments/assets/3120ec49-c2bd-45ee-93f6-12244c3a0b04" />
-
+</p>
 
 ### **Choice of local LLM**
 Due to technical limitations, this project and its benchmark were developed using a small 0.6B parameter model (`Qwen3-0.6B`).
