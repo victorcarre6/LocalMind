@@ -67,7 +67,7 @@ def add_no_think(prompt: str) -> str:
 def generate_response(user_input: str, input_text: str, enable_thinking: bool, show_thinking: bool, ephemeral_mode: bool) -> str:
     if not enable_thinking and "/no_think" not in input_text:
         input_text = add_no_think(input_text)
-    start_generate = time.time()
+    start_generate = time.time()    
     input_tokens = llm.tokenize(input_text.encode('utf-8'), add_special=True, parse_special=True)
     output_tokens = llm.generate(
         input_tokens,

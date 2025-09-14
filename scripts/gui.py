@@ -480,12 +480,12 @@ def open_github(event):
 def show_help():
     help_window = tk.Toplevel(root)
     help_window.title("Help")
-    help_window.geometry("600x350")
+    help_window.geometry("500x500")
     help_window.configure(bg="#323232")
     help_window.resizable(False, False)
 
     frame = tk.Frame(help_window, bg="#323232")
-    frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+    frame.place(x=0, y=0, width=960, height=450)
 
     title_label = tk.Label(
         frame,
@@ -498,27 +498,38 @@ def show_help():
     title_label.pack(fill=tk.X, pady=(0, 2))
 
     help_text = (
-        "• XXXXXXXXXXXX.\n\n"
-        "• Generate answer: Extracts the keywords from your question, searches for similar past conversations in your SQL database, and summarizes the relevant content using a local LLM.\n"
-        "   The final prompt is displayed and automatically copied to your clipboard!\n\n"
-        "• Settings: XXXXX\n\n"
-        "• Memory: Opens an advanced statistics panel, including:\n"
-        "   Visualization of keywords extracted from your question, from the transitory generated prompt.\n"
-        "   Correlation graphs between the keywords.\n"
-        "   Database insights: number and frequency of keywords, and used LLM models.\n\n"
-        "• Workflow: XXXXX\n\n"
-        "• Tools: XXXXX\n\n"
-        "To learn more, troubleshoot potential script issues, or get in touch, visit:\n"
-        "github.com/victorcarre6/llm-memorization."
-    )
+            "• Generate (▲): Ask a question and get an answer using the memory system.\n\n"
+            "• Profiles:\n"
+            "   - Default: General-purpose profile, used if none is selected.\n"
+            "   - All: Uses the entire database memory.\n"
+            "   - Add: Create a new profile to compartmentalize memory.\n"
+            "   - Edit / Delete: Manage profiles. Deleting one permanently erases its memory!\n\n"
+            "• Settings:\n"
+            "   - Prompt processing:\n"
+            "      • Long-term memory: Enable, adjust keyword count, depth, and similarity threshold.\n"
+            "      • Ephemeral mode: Private mode, prevents adding new entries to the database.\n"
+            "      • Short-term memory: Enable, set depth, or reset.\n"
+            "   - Model tuning:\n"
+            "      • Reasoning mode: Enable model’s internal reasoning (if supported).\n"
+            "      • Show reasoning: Display reasoning steps in chat when enabled.\n"
+            "      • Temperature: Controls creativity/randomness.\n"
+            "      • Edit system prompt: Modify global instructions (format, persona, etc).\n\n"
+            "• More: Advanced statistics panel with:\n"
+            "   - Keywords: Visualize extracted keywords from questions and prompts.\n"
+            "   - Contexts: Show retrieved Q&A pairs with relevance scores.\n"
+            "   - Heatmap correlation: Display correlations between keywords.\n"
+            "   - Database: General information about your memory database.\n\n"
+            "To learn more, troubleshoot issues, or get in touch, visit:\n"
+            "github.com/victorcarre6/llm-memorization."
+        )
+    
     label = tk.Label(
         frame,
         text=help_text,
         font=("Segoe UI", 12),
         bg="#323232",
         fg="white",
-        justify=tk.LEFT,
-        wraplength=550
+        justify=tk.LEFT
     )
     label.pack(fill=tk.BOTH, expand=True)
 
