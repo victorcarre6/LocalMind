@@ -26,7 +26,7 @@ from keybert import KeyBERT
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # === INITIALISATION ===
 
@@ -40,10 +40,8 @@ def expand_path(value):
     if isinstance(value, Path):
         return str(value.resolve())
     
-    # Expansion du ~ et conversion en Path
     expanded = Path(os.path.expanduser(value))
-    
-    # Si le chemin est relatif, on le combine avec PROJECT_ROOT
+
     if not expanded.is_absolute():
         expanded = PROJECT_ROOT / expanded
     
@@ -106,16 +104,13 @@ conn = sqlite3.connect(db_path)
 cur = conn.cursor()
 
 # === PROFILS ===
-# Variable globale pour le profil actif
 
 active_profile_name = "Default"
-# Liste locale des profils disponibles
 local_profiles = ["Default", "All"]
 
- # --- Initialisation de l'index vectoriel ---
-VECTOR_DIM = 384
+# === INDEX VECTORIEL ET MODÈLES ===
 
-# --- FAISS persistant ---
+VECTOR_DIM = 384
 FAISS_INDEX_PATH = PROJECT_ROOT / "resources" / "faiss.index"
 
 def load_faiss_index():
@@ -184,10 +179,7 @@ class ContextData:
     def combined_score(self):
         return self.score_kw * self.score_rerank
 
-# === FONCTIONS SECONDAIRES ===
-
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# === PIPELINE ET FONCTIONS SECONDAIRES ===
 
 _LEMMATIZE_CACHE = {}
 
@@ -581,9 +573,6 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
     has_short = bool(processed_last_convos)
     parts = []
 
-    # Compose system prompt for each case
-    # system_prompt is always in English, as per instruction.
-    # Compose the system prompt part first, depending on memory situation:
     if not has_long and not has_short:
         # 1. Ni short-term ni long-term
         sys_text = (
@@ -620,8 +609,6 @@ def generate_prompt_paragraph(context, question, keywords=None, lang=None, histo
         )
         parts.append(f"<|im_start|>system\n{sys_text}<|im_end|>")
 
-    # Now, build the rest of the prompt (contexts and question) as before.
-    # Add context sections depending on what is present:
     if has_long:
         parts.append("\n### PAST CONVERSATIONS (secondary context) ###")
         for idx, q, a in processed_items:

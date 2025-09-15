@@ -206,4 +206,5 @@ datas/conversations_example_clean.db
 datas/conversations.db
 datas/conversations/
 datas/old/
+scripts/save
 libllama.sh

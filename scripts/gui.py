@@ -53,6 +53,8 @@ temp_var = tk.DoubleVar(value=memory_conf.get("sampler_params", {}).get("temp", 
 system_prompt_var = tk.StringVar(value=llm_conf.get("system_prompt", ""))
 checkbox_ephemeral_mode = tk.BooleanVar(value=False)
 
+# === FONCTIONS DE PARAMETRAGE ===
+
 def reset_to_defaults(settings_window=None):
     global memory_conf, llm_conf
 
@@ -99,7 +101,7 @@ def save_gui_config(*args):
         json.dump(config, f, indent=2)
 
 
-# --- Auto-save changes to config.json when variables change ---
+# Sauvegarde automatique des paramètres
 keyword_count_var.trace_add("write", save_gui_config)
 context_count_var.trace_add("write", save_gui_config)
 instant_memory_count_var.trace_add("write", save_gui_config)
@@ -111,93 +113,7 @@ threshold_count_var.trace_add("write", save_gui_config)
 temp_var.trace_add("write", save_gui_config)
 label_temperature = None
 
-
 main.set_gui_vars(keyword_count_var, context_count_var)
-
-# === FONCTIONS PRINCIPALES ===
-
-def preload_models_and_update_status():
-    label_status.config(text="Loading models...", foreground="#FFD700")
-    try:
-        main.load_models_in_background()
-        label_status.config(text="Ready", foreground="white")
-    except Exception as e:
-        label_status.config(text=f"Error loading models: {e}", foreground="#ff6b6b")
-
-def on_generate():
-    global conversation_counter
-
-    start_on_generate = time.time()
-
-    user_input = entry_question.get("1.0", tk.END).strip()
-    instant_memory_count = instant_memory_count_var.get()
-    context_count = context_count_var.get()
-    keyword_count = keyword_count_var.get()
-    memory_recall = checkbox_memory_recall.get()
-    instant_memory = checkbox_instant_memory.get()
-    similarity_threshold = threshold_count_var.get()
-    instant_memory_count = instant_memory_count_var.get()
-    system_prompt = system_prompt_var.get()
-    history_limit = min(conversation_counter, instant_memory_count)
-
-    if not user_input:
-        update_status("Please enter a question.", error=True)
-        return
-
-    update_status("Processing prompt...")
-
-    root.update()
-
-    try:
-        start_on_ask = time.time()
-        final_prompt = on_ask(
-            user_input,
-            context_limit=context_count,
-            keyword_count=keyword_count,
-            recall=memory_recall,
-            history_limit=history_limit,
-            instant_memory=instant_memory,
-            similarity_threshold=similarity_threshold,
-            system_prompt=system_prompt
-        )
-        end_on_ask = time.time()
-
-        print("")
-        print("==== PROMPT GÉNÉRÉ ====")
-        print(final_prompt)
-        print("")
-        print("==== MÉTRIQUES DE LA CONVERSATION ====")
-        print(f"Durée de processing du prompt : {end_on_ask - start_on_ask:.2f} s")
-
-        update_status("Generating response...")
-        root.update()
-
-        response = generate_response(
-            user_input,
-            final_prompt,
-            enable_thinking=checkbox_thinking.get(),
-            show_thinking=checkbox_show_thinking.get(),
-            ephemeral_mode=checkbox_ephemeral_mode.get()
-        )
-        end_generate = time.time()
-        print(f"Durée totale de l'échange : {end_generate - start_on_generate:.2f} s")
-        
-        if not checkbox_ephemeral_mode.get():
-            conversation_counter += 1
-
-        # Insert user message in chat history
-        chat_history.config(state=tk.NORMAL)
-        chat_history.insert(tk.END, "You: " + user_input + "\n", "user")
-        chat_history.insert(tk.END, "Assistant: " + response + "\n\n", "assistant")
-        chat_history.config(state=tk.DISABLED)
-
-        entry_question.delete("1.0", tk.END)
-        update_status(f"Response generated successfully ({end_generate - start_on_generate:.1f} s).", success=True)
-        
-    except Exception as e:
-        update_status(f"Error: {e}", error=True)
-
-# === Fonctions de paramétrage ===
 
 def erase_short_term_memory():
     global conversation_counter
@@ -261,7 +177,92 @@ def update_system_prompt(new_prompt: str):
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
-# === PROFILS : Gestion des profils utilisateur ===
+# === FONCTIONS PRINCIPALES ===
+
+def preload_models_and_update_status():
+    label_status.config(text="Loading models...", foreground="#FFD700")
+    try:
+        main.load_models_in_background()
+        label_status.config(text="Ready", foreground="white")
+    except Exception as e:
+        label_status.config(text=f"Error loading models: {e}", foreground="#ff6b6b")
+
+def on_generate():
+    global conversation_counter
+
+    start_on_generate = time.time()
+
+    user_input = entry_question.get("1.0", tk.END).strip()
+    instant_memory_count = instant_memory_count_var.get()
+    context_count = context_count_var.get()
+    keyword_count = keyword_count_var.get()
+    memory_recall = checkbox_memory_recall.get()
+    instant_memory = checkbox_instant_memory.get()
+    similarity_threshold = threshold_count_var.get()
+    instant_memory_count = instant_memory_count_var.get()
+    system_prompt = system_prompt_var.get()
+    history_limit = min(conversation_counter, instant_memory_count)
+
+    if not user_input:
+        update_status("Please enter a question.", error=True)
+        return
+
+    update_status("Processing prompt...")
+
+    root.update()
+
+    try:
+        start_on_ask = time.time()
+        final_prompt = on_ask(
+            user_input,
+            context_limit=context_count,
+            keyword_count=keyword_count,
+            recall=memory_recall,
+            history_limit=history_limit,
+            instant_memory=instant_memory,
+            similarity_threshold=similarity_threshold,
+            system_prompt=system_prompt
+        )
+        end_on_ask = time.time()
+
+        #print("")
+        #print("==== PROMPT GÉNÉRÉ ====")
+        #print(final_prompt)
+        #print("")
+        print("==== MÉTRIQUES DE LA CONVERSATION ====")
+        print(f"Durée de processing du prompt : {end_on_ask - start_on_ask:.2f} s")
+
+        update_status("Generating response...")
+        root.update()
+
+        response = generate_response(
+            user_input,
+            final_prompt,
+            enable_thinking=checkbox_thinking.get(),
+            show_thinking=checkbox_show_thinking.get(),
+            ephemeral_mode=checkbox_ephemeral_mode.get()
+        )
+        end_generate = time.time()
+        print(f"Durée totale de l'échange : {end_generate - start_on_generate:.2f} s")
+        
+        if not checkbox_ephemeral_mode.get():
+            conversation_counter += 1
+
+        # Insert user message in chat history
+        chat_history.config(state=tk.NORMAL)
+        chat_history.insert(tk.END, "You: " + user_input + "\n", "user")
+        chat_history.insert(tk.END, "Assistant: " + response + "\n\n", "assistant")
+        chat_history.config(state=tk.DISABLED)
+
+        entry_question.delete("1.0", tk.END)
+        update_status(f"Response generated successfully ({end_generate - start_on_generate:.1f} s).", success=True)
+        
+    except Exception as e:
+        update_status(f"Error: {e}", error=True)
+
+
+# === WORKSPACES ===
+
 def open_profiles_menu():
     profiles_window = tk.Toplevel(root)
     profiles_window.title("Workspaces")
@@ -450,17 +451,11 @@ def open_profiles_menu():
     btn_ok = ttk.Button(btns_frame, text="Select", command=on_ok, style="Bottom.TButton", width=5)
     btn_ok.pack(side=tk.RIGHT, padx=2)
 
-    # Double-clic sélectionne et ferme
     def on_double_click(event):
         on_ok()
     profiles_listbox.bind("<Double-1>", on_double_click)
-
-    # Touche entrée = Ok
     profiles_window.bind("<Return>", lambda e: on_ok())
-    # Echap = fermer sans changer
     profiles_window.bind("<Escape>", lambda e: profiles_window.destroy())
-
-    # Focus sur la liste
     profiles_listbox.focus_set()
 
 # === Fonctions d'affichage ===
@@ -613,7 +608,6 @@ def open_settings():
     )
     chk_ephemeral_mode.pack(anchor='center', pady=(5,5))
 
-    # Vertical spacing
     spacer = ttk.Label(settings_frame, text="")
     spacer.pack(pady=(6,0))
 
@@ -648,7 +642,6 @@ def open_settings():
     )
     erase_btn.pack(anchor='center', pady=(4,8))
 
-    # Vertical spacing
     spacer = ttk.Label(settings_frame, text="")
     spacer.pack(pady=(10,0))
 
@@ -709,11 +702,9 @@ root.title("LocalMind")
 root.geometry("550x600")
 root.configure(bg="#323232")
 
-# Style global unique
 style = ttk.Style(root)
 style.theme_use('clam')
 
-# Configuration du style
 style_config = {
     'Green.TButton': {
         'background': '#599258',
@@ -835,7 +826,8 @@ style.map("ResetGrey.TButton",
 main_frame = ttk.Frame(root, padding=10, style='TFrame')
 main_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-# Chat history area at the top
+# Chat interface
+
 chat_history = scrolledtext.ScrolledText(
     main_frame,
     width=100,
@@ -849,19 +841,17 @@ chat_history = scrolledtext.ScrolledText(
 )
 chat_history.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
 
-# Define tags for styling user and assistant messages
+
 chat_history.tag_configure("user", foreground="#599258", font=('Segoe UI', 13, 'bold'))
 chat_history.tag_configure("assistant", foreground="#CECABF", font=('Segoe UI', 13))
 
-# Input frame at the bottom
+# Input frame
 input_frame = tk.Frame(main_frame, bg="#323232")
 input_frame.pack(fill=tk.X, expand=False)
 
-# Reduce input width from 80 to 60
 entry_question = tk.Text(input_frame, height=4, width=20, wrap="word", font=('Segoe UI', 13))
 entry_question.pack(side="left", fill="both", expand=True)
 
-# Scrollbar personnalisée for input text
 style.configure("Vertical.TScrollbar",
                 troughcolor='#FDF6EE',
                 background='#C0C0C0',
@@ -871,10 +861,7 @@ style.configure("Vertical.TScrollbar",
                 arrowcolor='black',
                 relief='flat')
 
-
-
 entry_question.bind("<Return>", lambda event: (on_generate(), "break"))
-
 
 input_button_frame = tk.Frame(input_frame, bg="#323232")
 input_button_frame.pack(side="right", fill=tk.Y)
@@ -887,20 +874,16 @@ btn_ask = ttk.Button(
 )
 btn_ask.pack(side="right", padx=(5, 0), pady=(0, 0))
 
-
-# === MENU CONTEXTE (clic droit) ===
-
-# Détection de l'OS
+# Context menu (right click)
 if platform.system() == "Darwin":
     right_click_event = "<Button-2>"
 else:
     right_click_event = "<Button-3>"
 
-# Context menu for chat_history
 chat_context_menu = tk.Menu(chat_history, tearoff=0)
-chat_context_menu.add_command(label="Copier", command=lambda: chat_history.event_generate("<<Copy>>"))
-chat_context_menu.add_command(label="Coller", command=lambda: chat_history.event_generate("<<Paste>>"))
-chat_context_menu.add_command(label="Tout sélectionner", command=lambda: chat_history.tag_add("sel", "1.0", "end"))
+chat_context_menu.add_command(label="Copy", command=lambda: chat_history.event_generate("<<Copy>>"))
+chat_context_menu.add_command(label="Paste", command=lambda: chat_history.event_generate("<<Paste>>"))
+chat_context_menu.add_command(label="Select all", command=lambda: chat_history.tag_add("sel", "1.0", "end"))
 
 def show_chat_context_menu(event):
     try:
@@ -912,9 +895,9 @@ chat_history.bind(right_click_event, show_chat_context_menu)
 
 # Menu contextuel pour entry_question (zone de question)
 question_context_menu = tk.Menu(entry_question, tearoff=0)
-question_context_menu.add_command(label="Copier", command=lambda: entry_question.event_generate("<<Copy>>"))
-question_context_menu.add_command(label="Coller", command=lambda: entry_question.event_generate("<<Paste>>"))
-question_context_menu.add_command(label="Tout sélectionner", command=lambda: entry_question.tag_add("sel", "1.0", "end"))
+question_context_menu.add_command(label="Copy", command=lambda: entry_question.event_generate("<<Copy>>"))
+question_context_menu.add_command(label="Paste", command=lambda: entry_question.event_generate("<<Paste>>"))
+question_context_menu.add_command(label="Select all", command=lambda: entry_question.tag_add("sel", "1.0", "end"))
 
 def show_question_context_menu(event):
     try:
@@ -924,36 +907,30 @@ def show_question_context_menu(event):
 
 entry_question.bind(right_click_event, show_question_context_menu)
 
-# Ajouter aussi aux frames si nécessaire
+
 input_frame.bind(right_click_event, show_question_context_menu)
 main_frame.bind(right_click_event, show_chat_context_menu)
 
-
-#
 # === BARRE DE STATUT ET BOUTONS ===
-# Place buttons directly under input area, with Profiles/Settings left, More/Help right, and status below.
+
 status_buttons_frame = ttk.Frame(main_frame, style='TFrame')
 status_buttons_frame.pack(fill=tk.X, pady=(5, 2))
 
-# Left and right button frames
 left_buttons = ttk.Frame(status_buttons_frame, style='TFrame')
 left_buttons.pack(side=tk.LEFT, anchor='w')
 right_buttons = ttk.Frame(status_buttons_frame, style='TFrame')
 right_buttons.pack(side=tk.RIGHT, anchor='e')
 
-# Left: Profiles and Settings
 btn_profiles = ttk.Button(left_buttons, text="Workspaces", command=open_profiles_menu, style='Bottom.TButton', width=10)
 btn_profiles.pack(side=tk.LEFT, padx=(0, 5))
 btn_settings = ttk.Button(left_buttons, text="Settings", command=open_settings, style='Bottom.TButton', width=8)
 btn_settings.pack(side=tk.LEFT, padx=(0, 5))
 
-# Right: More and Help
 btn_infos = ttk.Button(right_buttons, text="More", command=show_infos, style='Bottom.TButton', width=8)
 btn_infos.pack(side=tk.LEFT, padx=(0, 5))
 btn_help = ttk.Button(right_buttons, text="Help", style='Bottom.TButton', command=show_help, width=8)
 btn_help.pack(side=tk.LEFT, padx=(0, 0))
 
-# Status label below the buttons, spanning the full width
 label_status = ttk.Label(
     main_frame,
     text="Ready",
@@ -962,7 +939,6 @@ label_status = ttk.Label(
     anchor='w'
 )
 label_status.pack(fill=tk.X, anchor='w', pady=(0, 2))
-
 
 # === FOOTER ===
 footer_frame = ttk.Frame(root, style='TFrame')
@@ -977,7 +953,6 @@ github_link.bind("<Button-1>", open_github)
 
 bring_to_front()
 
-# Lancer le thread de préchargement des modèles AVANT l'ouverture de la fenêtre principale
 preload_thread = threading.Thread(target=preload_models_and_update_status, daemon=True)
 preload_thread.start()
 

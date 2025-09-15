@@ -38,6 +38,8 @@ sampler_params = SamplerParams(
 system_prompt = model_cfg["system_prompt"]
 stop_tokens = [151645]
 
+# === FONCTIONS UTILITAIRES ===
+
 def text_formatting(raw_response: str) -> str:
     cleaned_text = re.sub(r"<\|im_start\|>", "", raw_response)
     cleaned_text = re.sub(r"<\|im_end\|>", "", cleaned_text)
@@ -63,6 +65,8 @@ def add_no_think(prompt: str) -> str:
         start, end = last_match.span(2)  # position de <|im_end|> du dernier bloc
         prompt = prompt[:start] + " /no_think" + prompt[start:]
     return prompt
+
+# === FONCTION PRINCIPALE ===
 
 def generate_response(user_input: str, input_text: str, enable_thinking: bool, show_thinking: bool, ephemeral_mode: bool) -> str:
     if not enable_thinking and "/no_think" not in input_text:
@@ -93,6 +97,8 @@ def generate_response(user_input: str, input_text: str, enable_thinking: bool, s
         return clean_response
     else:
         return formatted_response
+
+# === BLOC PRINCIPAL ===
 
 if __name__ == "__main__":
     prompt = input("Tape ta question : ")
