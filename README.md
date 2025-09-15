@@ -1,4 +1,4 @@
-# LocalMind — A chat interface to discuss with local models with persistent memory
+# LocalMind — A chat interface to discuss with local models that maintain persistent memory
 
 <p align="center">
   <img src="https://img.shields.io/github/stars/victorcarre6/llm-assistant?style=social" />
